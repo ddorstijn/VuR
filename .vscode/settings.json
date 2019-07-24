@@ -1,0 +1,9 @@
+{
+    "C_Cpp.configurationWarnings": "Disabled",
+    "files.associations": {
+        "stdbool.h": "c",
+        "*.tcc": "c"
+    },
+    "C_Cpp.intelliSenseEngineFallback": "Disabled",
+    "C_Cpp.errorSquiggles": "Enabled"
+}
