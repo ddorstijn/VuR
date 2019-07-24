@@ -550,5 +550,5 @@ vutil_init_render_pass(VkDevice device, VkSwapchainKHR swapchain, VkRenderPass* 
         // Error
     }
 
-    return render_pass;
+    return VUR_SUCCESS;
 }

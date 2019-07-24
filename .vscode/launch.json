@@ -8,7 +8,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceRoot}/build/app/Vuse.exe",
+            "program": "${workspaceRoot}/bin/Vuse.exe",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
