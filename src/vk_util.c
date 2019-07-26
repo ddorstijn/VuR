@@ -50,7 +50,6 @@ vutil_init_instance(const char* app_name, VkInstance* instance)
     if (ENABLE_DEBUG) {
         // Create a temporary array for safety with calloc
         char** tmp_extensions;
-        char** debug_layer;
 
         tmp_extensions = malloc((extension_count + 1) * sizeof(char*));
         if (tmp_extensions == NULL) {
@@ -68,12 +67,7 @@ vutil_init_instance(const char* app_name, VkInstance* instance)
         extensions = (const char* const*)tmp_extensions;
 
         // Add debug layer to enabled layers
-        debug_layer = malloc(sizeof(char*));
-        if (debug_layer == NULL) {
-            return VUR_ALLOC_FAILED;
-        }
-
-        debug_layer[0] = "VK_LAYER_LUNARG_standard_validation";
+        const char* debug_layer[] = { "VK_LAYER_LUNARG_standard_validation" };
         layer_names = (const char* const*)debug_layer;
         layer_count = 1;
     }
@@ -105,11 +99,7 @@ vutil_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_q
     // Retrieve count by passing NULL
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, NULL);
 
-    VkQueueFamilyProperties* queue_properties;
-    queue_properties = malloc(queue_family_count * sizeof(*queue_properties));
-    if (queue_properties == NULL) {
-        return VUR_ALLOC_FAILED;
-    }
+    VkQueueFamilyProperties queue_properties[queue_family_count];
 
     // Fill the queue family properties array
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_properties);
@@ -120,8 +110,6 @@ vutil_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_q
             *graphics_queue_family_index = i;
         }
     }
-
-    free(queue_properties);
 
     return VUR_SUCCESS;
 }
@@ -208,11 +196,7 @@ vutil_select_suitable_physical_device(VkPhysicalDevice* physical_devices, uint32
         vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, NULL);
 
         // Allocate the memory for the amount of queue families
-        VkQueueFamilyProperties* queue_properties;
-        queue_properties = malloc(queue_family_count * sizeof(*queue_properties));
-        if (queue_properties == NULL) {
-            return VUR_ALLOC_FAILED;
-        }
+        VkQueueFamilyProperties queue_properties[queue_family_count];
 
         // Fill the queue family properties array
         vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, queue_properties);
@@ -291,11 +275,7 @@ vutil_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface
         abort();
     }
 
-    VkPresentModeKHR* present_modes;
-    present_modes = malloc(present_mode_count * sizeof(*present_modes));
-    if (present_modes == NULL) {
-        return VUR_ALLOC_FAILED;
-    }
+    VkPresentModeKHR present_modes[present_mode_count];
 
     result = vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &present_mode_count, present_modes);
     if (result) {
@@ -407,54 +387,51 @@ vutil_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface
     }
 
     return VUR_SUCCESS;
-
-    // Swapchain images
-    // result = vkGetSwapchainImagesKHR(vutil_context->device, vutil_context->swapchain,
-    //                                  &vutil_context->image_count, NULL);
-    // if (result) {
-    //     fprintf(stderr, "Failed to get swapchain images\n");
-    //     abort();
-    // }
-
-    // VkImage* swapchain_images = malloc(vutil_context->image_count * sizeof(*swapchain_images));
-    // result = vkGetSwapchainImagesKHR(vutil_context->device, vutil_context->swapchain,
-    //                                  &vutil_context->image_count, swapchain_images);
-    // if (result) {
-    //     fprintf(stderr, "Failed to get swapchain images\n");
-    //     abort();
-    // }
-
-    // vutil_context->swapchain_buffers =
-    //     malloc(vutil_context->image_count * sizeof(*vutil_context->swapchain_buffers));
-    // for (uint32_t i = 0; i < vutil_context->image_count; ++i) {
-    //     vutil_context->swapchain_buffers[i].image = swapchain_images[i];
-
-    //     VkImageViewCreateInfo image_view_create_info;
-    //     image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    //     image_view_create_info.pNext = NULL;
-    //     image_view_create_info.flags = 0;
-    //     image_view_create_info.image = vutil_context->swapchain_buffers[i].image;
-    //     image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    //     image_view_create_info.format = vutil_context->format;
-    //     image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-    //     image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-    //     image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-    //     image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-    //     image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    //     image_view_create_info.subresourceRange.baseMipLevel = 0;
-    //     image_view_create_info.subresourceRange.levelCount = 1;
-    //     image_view_create_info.subresourceRange.baseArrayLayer = 0;
-    //     image_view_create_info.subresourceRange.layerCount = 1;
-
-    //     result = vkCreateImageView(vutil_context->device, &image_view_create_info, NULL,
-    //                                &vutil_context->swapchain_buffers[i].view);
-    //     if (result) {
-    //         printf("Faild to create image view in loop: %d\n", i);
-    //     }
-    // }
-
-    // free(swapchain_images);
 }
+
+// VuResult
+// vutil_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t* image_count)
+// {
+//     VkResult result = vkGetSwapchainImagesKHR(device, swapchain, image_count, NULL);
+//     if (result) {
+//         fprintf(stderr, "Failed to get swapchain images\n");
+//         abort();
+//     }
+
+//     VkImage swapchain_images[*image_count];
+//     result = vkGetSwapchainImagesKHR(device, swapchain, image_count, swapchain_images);
+//     if (result) {
+//         fprintf(stderr, "Failed to get swapchain images\n");
+//         abort();
+//     }
+
+//     swapchain_buffers = malloc(*image_count * sizeof(*swapchain_buffers));
+//     for (uint32_t i = 0; i < *image_count; ++i) {
+//         swapchain_buffers[i].image = swapchain_images[i];
+
+//         VkImageViewCreateInfo image_view_create_info;
+//         image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+//         image_view_create_info.pNext = NULL;
+//         image_view_create_info.flags = 0;
+//         image_view_create_info.image = swapchain_buffers[i].image;
+//         image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+//         image_view_create_info.format = format;
+//         image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+//         image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+//         image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+//         image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+//         image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//         image_view_create_info.subresourceRange.baseMipLevel = 0;
+//         image_view_create_info.subresourceRange.levelCount = 1;
+//         image_view_create_info.subresourceRange.baseArrayLayer = 0;
+//         image_view_create_info.subresourceRange.layerCount = 1;
+
+//         result = vkCreateImageView(device, &image_view_create_info, NULL, &swapchain_buffers[i].view);
+//         if (result) {
+//             printf("Faild to create image view in loop: %d\n", i);
+//         }
+//     }
+// }
 
 VuResult
 vutil_init_render_pass(VkDevice device, VkSwapchainKHR swapchain, VkRenderPass* renderpass)
