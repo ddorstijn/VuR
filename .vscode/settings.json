@@ -2,6 +2,7 @@
     "C_Cpp.errorSquiggles": "Enabled",
     "files.associations": {
         "renderer.h": "c",
-        "cglm.h": "c"
+        "cglm.h": "c",
+        "stdbool.h": "c"
     }
 }

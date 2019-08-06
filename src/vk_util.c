@@ -69,7 +69,7 @@ vut_init_instance(const char* app_name, VkInstance* instance)
 }
 
 VuResult
-vut_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index)
+vut_get_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index)
 {
     uint32_t queue_family_count;
 
