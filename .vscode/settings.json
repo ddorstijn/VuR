@@ -3,6 +3,7 @@
     "files.associations": {
         "renderer.h": "c",
         "cglm.h": "c",
-        "stdbool.h": "c"
+        "stdbool.h": "c",
+        "vk_sdk_platform.h": "c"
     }
 }

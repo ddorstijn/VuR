@@ -4,6 +4,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 
+#include <stdbool.h>
+
 typedef enum VuResult
 {
     VUR_SUCCESS = 0,
@@ -26,7 +28,9 @@ VuResult
 vut_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device);
 
 VuResult
-vut_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index);
+vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_t* queue_family_count,
+                             uint32_t* graphics_queue_family_index, uint32_t* present_queue_family_index,
+                             bool* separate_present_queue);
 
 VuResult
 vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
@@ -45,6 +49,9 @@ vut_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, VkFormat fo
 
 VuResult
 vut_create_semaphore(VkDevice device, VkSemaphore* semaphore);
+
+VuResult
+vut_create_fence(VkDevice device, VkFence* fence);
 
 VkSubmitInfo
 vut_create_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete);

@@ -69,38 +69,29 @@ vut_init_instance(const char* app_name, VkInstance* instance)
 }
 
 VuResult
-vut_get_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index)
+vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_t* queue_family_count,
+                             uint32_t* graphics_queue_family_index, uint32_t* present_queue_family_index,
+                             bool* separate_present_queue)
 {
-    uint32_t queue_family_count;
-
     // Retrieve count by passing NULL
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, NULL);
-    VkQueueFamilyProperties queue_properties[queue_family_count];
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, NULL);
+    VkQueueFamilyProperties queue_properties[*queue_family_count];
 
     // Fill the queue family properties array
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_properties);
-
-    // Get the first family which supports graphics
-    for (uint32_t i = 0; i < queue_family_count; i++) {
-        if (queue_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            *graphics_queue_family_index = i;
-        }
-    }
-
-    return VUR_SUCCESS;
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, queue_properties);
 
     // Iterate over each queue to learn whether it supports presenting:
-    VkBool32 *supportsPresent = (VkBool32 *)malloc(demo->queue_family_count * sizeof(VkBool32));
-    for (uint32_t i = 0; i < demo->queue_family_count; i++) {
-        vkGetPhysicalDeviceSurfaceSupportKHR(demo->gpu, i, demo->surface, &supportsPresent[i]);
+    VkBool32 supportsPresent[*queue_family_count];
+    for (uint32_t i = 0; i < *queue_family_count; i++) {
+        vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supportsPresent[i]);
     }
 
     // Search for a graphics and a present queue in the array of queue
     // families, try to find one that supports both
     uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
     uint32_t presentQueueFamilyIndex = UINT32_MAX;
-    for (uint32_t i = 0; i < demo->queue_family_count; i++) {
-        if ((demo->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+    for (uint32_t i = 0; i < *queue_family_count; i++) {
+        if ((queue_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
             if (graphicsQueueFamilyIndex == UINT32_MAX) {
                 graphicsQueueFamilyIndex = i;
             }
@@ -116,7 +107,7 @@ vut_get_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family
     if (presentQueueFamilyIndex == UINT32_MAX) {
         // If didn't find a queue that supports both graphics and present, then
         // find a separate present queue.
-        for (uint32_t i = 0; i < demo->queue_family_count; ++i) {
+        for (uint32_t i = 0; i < *queue_family_count; ++i) {
             if (supportsPresent[i] == VK_TRUE) {
                 presentQueueFamilyIndex = i;
                 break;
@@ -126,13 +117,12 @@ vut_get_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family
 
     // Generate error if could not find both a graphics and a present queue
     if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) {
-        ERR_EXIT("Could not find both graphics and present queues\n", "Swapchain Initialization Failure");
+        // Error
     }
 
-    demo->graphics_queue_family_index = graphicsQueueFamilyIndex;
-    demo->present_queue_family_index = presentQueueFamilyIndex;
-    demo->separate_present_queue = (demo->graphics_queue_family_index != demo->present_queue_family_index);
-    free(supportsPresent);
+    graphics_queue_family_index = graphicsQueueFamilyIndex;
+    present_queue_family_index = presentQueueFamilyIndex;
+    separate_present_queue = (graphics_queue_family_index != present_queue_family_index);
 }
 
 VuResult
@@ -263,7 +253,28 @@ vut_create_semaphore(VkDevice device, VkSemaphore* semaphore)
     semaphore_info.pNext = NULL;
     semaphore_info.flags = 0;
 
-    vkCreateSemaphore(device, &semaphore_info, NULL, semaphore);
+    VkResult result = vkCreateSemaphore(device, &semaphore_info, NULL, semaphore);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_create_fence(VkDevice device, VkFence* fence)
+{
+    VkFenceCreateInfo fence_info;
+    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence_info.pNext = NULL;
+    fence_info.flags = 0;
+
+    VkResult result = vkCreateFence(device, &fence_info, NULL, fence);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
 }
 
 VuResult
@@ -275,7 +286,41 @@ vut_create_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* c
     command_pool_info.flags = 0;
     command_pool_info.queueFamilyIndex = family_index;
 
-    vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
+    VkResult result = vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_get_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format, VkColorSpaceKHR* color_space)
+{
+    // Get the list of VkFormat's that are supported:
+    uint32_t format_count;
+    VkResult result = vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, NULL);
+    if (result) {
+        // Error
+    }
+
+    VkSurfaceFormatKHR surface_formats[format_count];
+    result = vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, surface_formats);
+    if (result) {
+        // Error
+    }
+
+    // If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+    // the surface has no preferred format.  Otherwise, at least one
+    // supported format will be returned.
+    if (format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED) {
+        *format = VK_FORMAT_B8G8R8A8_UNORM;
+    } else {
+        *format = surface_formats[0].format;
+    }
+    *color_space = surface_formats[0].colorSpace;
+
+    return VUR_SUCCESS;
 }
 
 VuResult

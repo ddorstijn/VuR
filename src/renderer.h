@@ -1,12 +1,6 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
-#include <stdbool.h>
-#include <stdio.h>
-
-#define GLFW_INCLUDE_VULKAN
-#include "GLFW/glfw3.h"
-
 // TODO: Fix
 #include "../extern/cglm/include/cglm/cglm.h"
 
@@ -79,8 +73,8 @@ typedef struct
     VkFence fences[FRAME_LAG];
     int frame_index;
 
-    VkCommandPool cmd_pool;
-    VkCommandPool present_cmd_pool;
+    VkCommandPool command_pool;
+    VkCommandPool present_command_pool;
 
     struct
     {
@@ -95,7 +89,7 @@ typedef struct
     struct texture_object textures[TEXTURE_COUNT];
     struct texture_object staging_texture;
 
-    VkCommandBuffer cmd; // Buffer for initialization commands
+    VkCommandBuffer command_buffer; // Buffer for initialization commands
     VkPipelineLayout pipeline_layout;
     VkDescriptorSetLayout descriptor_layout;
     VkPipelineCache pipeline_cache;
