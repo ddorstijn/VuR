@@ -88,6 +88,51 @@ vut_get_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family
     }
 
     return VUR_SUCCESS;
+
+    // Iterate over each queue to learn whether it supports presenting:
+    VkBool32 *supportsPresent = (VkBool32 *)malloc(demo->queue_family_count * sizeof(VkBool32));
+    for (uint32_t i = 0; i < demo->queue_family_count; i++) {
+        vkGetPhysicalDeviceSurfaceSupportKHR(demo->gpu, i, demo->surface, &supportsPresent[i]);
+    }
+
+    // Search for a graphics and a present queue in the array of queue
+    // families, try to find one that supports both
+    uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
+    uint32_t presentQueueFamilyIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < demo->queue_family_count; i++) {
+        if ((demo->queue_props[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
+            if (graphicsQueueFamilyIndex == UINT32_MAX) {
+                graphicsQueueFamilyIndex = i;
+            }
+
+            if (supportsPresent[i] == VK_TRUE) {
+                graphicsQueueFamilyIndex = i;
+                presentQueueFamilyIndex = i;
+                break;
+            }
+        }
+    }
+
+    if (presentQueueFamilyIndex == UINT32_MAX) {
+        // If didn't find a queue that supports both graphics and present, then
+        // find a separate present queue.
+        for (uint32_t i = 0; i < demo->queue_family_count; ++i) {
+            if (supportsPresent[i] == VK_TRUE) {
+                presentQueueFamilyIndex = i;
+                break;
+            }
+        }
+    }
+
+    // Generate error if could not find both a graphics and a present queue
+    if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) {
+        ERR_EXIT("Could not find both graphics and present queues\n", "Swapchain Initialization Failure");
+    }
+
+    demo->graphics_queue_family_index = graphicsQueueFamilyIndex;
+    demo->present_queue_family_index = presentQueueFamilyIndex;
+    demo->separate_present_queue = (demo->graphics_queue_family_index != demo->present_queue_family_index);
+    free(supportsPresent);
 }
 
 VuResult
