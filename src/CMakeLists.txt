@@ -9,5 +9,6 @@ add_library(
 target_include_directories(vulkan_renderer PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(vulkan_renderer PUBLIC glfw)
 target_link_libraries(vulkan_renderer PUBLIC Vulkan::Vulkan)
+target_link_libraries(vulkan_renderer PUBLIC cglm)
 
 target_compile_definitions(vulkan_renderer PRIVATE VK_USE_PLATFORM_WIN32_KHR)

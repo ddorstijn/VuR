@@ -1,3 +1,6 @@
 [submodule "extern/glfw3"]
 	path = extern/glfw3
 	url = https://github.com/glfw/glfw.git
+[submodule "extern/cglm"]
+	path = extern/cglm
+	url = https://github.com/recp/cglm.git

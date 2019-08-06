@@ -6,3 +6,4 @@ set_target_properties(Vuse
 )
 
 target_link_libraries(Vuse PRIVATE vulkan_renderer)
+target_link_libraries(Vuse PRIVATE cglm)

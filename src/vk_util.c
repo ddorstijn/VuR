@@ -7,7 +7,7 @@
 #define ENABLE_DEBUG 1
 
 VuResult
-vutil_init_window(const char* app_name, GLFWwindow** window)
+vut_init_window(const char* app_name, GLFWwindow** window)
 {
     if (!glfwInit()) {
         return VUR_GLFW_INIT_FAILED;
@@ -29,7 +29,7 @@ vutil_init_window(const char* app_name, GLFWwindow** window)
 }
 
 VuResult
-vutil_init_instance(const char* app_name, VkInstance* instance)
+vut_init_instance(const char* app_name, VkInstance* instance)
 {
     // Create app info for Vulkan
     VkApplicationInfo app_info;
@@ -41,47 +41,24 @@ vutil_init_instance(const char* app_name, VkInstance* instance)
 
     // Get required extensions from GLFW
     uint32_t extension_count;
-    const char* const* extensions;
-    extensions = glfwGetRequiredInstanceExtensions(&extension_count);
+    const char* const* extensions = glfwGetRequiredInstanceExtensions(&extension_count);
 
-    uint32_t layer_count = 0;
-    const char* const* layer_names;
-
-    if (ENABLE_DEBUG) {
-        // Create a temporary array for safety with calloc
-        char** tmp_extensions;
-
-        tmp_extensions = malloc((extension_count + 1) * sizeof(char*));
-        if (tmp_extensions == NULL) {
-            return VUR_ALLOC_FAILED;
-        }
-
-        // Fill the temporary array with the old data
-        for (uint8_t i = 0; i < extension_count; ++i) {
-            tmp_extensions[i] = (char*)extensions[i];
-        }
-
-        // Add the debug extension
-        tmp_extensions[extension_count++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-        // Set the old pointer to the newly created array
-        extensions = (const char* const*)tmp_extensions;
-
-        // Add debug layer to enabled layers
-        const char* debug_layer[] = { "VK_LAYER_LUNARG_standard_validation" };
-        layer_names = (const char* const*)debug_layer;
-        layer_count = 1;
-    }
-
-    // Create vutil instance
+    // Create vut instance
     VkInstanceCreateInfo instance_info;
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_info.pNext = NULL;
     instance_info.flags = 0;
     instance_info.pApplicationInfo = &app_info;
-    instance_info.enabledLayerCount = layer_count;
     instance_info.enabledExtensionCount = extension_count;
     instance_info.ppEnabledExtensionNames = extensions;
-    instance_info.ppEnabledLayerNames = layer_names;
+
+#ifdef ENABLE_DEBUG
+    // Add debug layer to enabled layers
+    const char* debug_layers[] = { "VK_LAYER_LUNARG_standard_validation" };
+
+    instance_info.ppEnabledLayerNames = debug_layers;
+    instance_info.enabledLayerCount = sizeof(debug_layers) / sizeof(debug_layers[0]);
+#endif
 
     VkResult result = vkCreateInstance(&instance_info, NULL, instance);
     if (result) {
@@ -92,13 +69,12 @@ vutil_init_instance(const char* app_name, VkInstance* instance)
 }
 
 VuResult
-vutil_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index)
+vut_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_queue_family_index)
 {
     uint32_t queue_family_count;
 
     // Retrieve count by passing NULL
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, NULL);
-
     VkQueueFamilyProperties queue_properties[queue_family_count];
 
     // Fill the queue family properties array
@@ -115,7 +91,7 @@ vutil_get_graphics_queue_family_index(VkPhysicalDevice gpu, uint32_t* graphics_q
 }
 
 VuResult
-vutil_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device)
+vut_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device)
 {
     // When using a single queue no priority is required
     float queue_priority[1] = { 1.0 };
@@ -153,8 +129,8 @@ vutil_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, 
 }
 
 VuResult
-vutil_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
-                           VkPhysicalDevice** physical_devices)
+vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
+                         VkPhysicalDevice** physical_devices)
 {
     // Get the number of devices (GPUs) available.
     VkResult result = vkEnumeratePhysicalDevices(instance, physical_device_count, NULL);
@@ -167,7 +143,7 @@ vutil_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
     }
 
     // Allocate space and get the list of devices.
-    *physical_devices = malloc(*physical_device_count * sizeof **physical_devices);
+    *physical_devices = (VkPhysicalDevice*)malloc(*physical_device_count * sizeof **physical_devices);
     if (*physical_devices == NULL) {
         fprintf(stderr, "Couldn't allocate memory for physical device list\n");
         abort();
@@ -183,8 +159,8 @@ vutil_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
 }
 
 VuResult
-vutil_select_suitable_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_device_count,
-                                      uint32_t* physical_device_index)
+vut_pick_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_device_count,
+                         uint32_t* physical_device_index)
 {
     int discrete_device_index = -1;
     int intergrated_device_index = -1;
@@ -234,33 +210,33 @@ vutil_select_suitable_physical_device(VkPhysicalDevice* physical_devices, uint32
     return VUR_SUCCESS;
 }
 
-uint32_t
-memory_type_from_properties(VkPhysicalDeviceMemoryProperties memory_properties, uint32_t typeBits,
-                            VkFlags requirements_mask, uint32_t* typeIndex)
+VuResult
+vut_create_semaphore(VkDevice device, VkSemaphore* semaphore)
 {
-    // Search memtypes to find first index with those properties
-    for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
-        if ((typeBits & 1) == 1) {
-            // Type is available, does it match user properties?
-            if ((memory_properties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
-                *typeIndex = i;
-                return 1;
-            }
-        }
-        typeBits >>= 1;
-    }
-    // No memory types matched, return failure
-    return 0;
+    VkSemaphoreCreateInfo semaphore_info;
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    semaphore_info.pNext = NULL;
+    semaphore_info.flags = 0;
+
+    vkCreateSemaphore(device, &semaphore_info, NULL, semaphore);
 }
 
 VuResult
-vutil_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
-                     VkSwapchainKHR* swapchain)
+vut_create_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
 {
-    // max allocation size for multi-buffer swapchain
-    // Size of the surface
-    // Rotation of the device
-    // Behavior of the surface when the output has an alpha channel
+    VkCommandPoolCreateInfo command_pool_info;
+    command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    command_pool_info.pNext = NULL;
+    command_pool_info.flags = 0;
+    command_pool_info.queueFamilyIndex = family_index;
+
+    vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
+}
+
+VuResult
+vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
+                   VkSwapchainKHR* swapchain, VkFormat* format, VkColorSpaceKHR* color_space)
+{
     VkSurfaceCapabilitiesKHR surface_capabilities;
     VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
     if (result) {
@@ -360,14 +336,30 @@ vutil_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface
         }
     }
 
+    // Get the list of VkFormat's that are supported:
+    uint32_t format_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, NULL);
+
+    VkSurfaceFormatKHR surface_formats[format_count];
+    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, surface_formats);
+    // If the format list includes just one entry of VK_FORMAT_UNDEFINED,
+    // the surface has no preferred format.  Otherwise, at least one
+    // supported format will be returned.
+    if (format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED) {
+        *format = VK_FORMAT_B8G8R8A8_UNORM;
+    } else {
+        *format = surface_formats[0].format;
+    }
+    *color_space = surface_formats[0].colorSpace;
+
     VkSwapchainCreateInfoKHR swapchain_create_info;
     swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapchain_create_info.pNext = NULL;
     swapchain_create_info.flags = 0;
     swapchain_create_info.surface = surface;
     swapchain_create_info.minImageCount = image_count;
-    // swapchain_create_info.imageFormat = format;
-    swapchain_create_info.imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+    swapchain_create_info.imageFormat = *format;
+    swapchain_create_info.imageColorSpace = *color_space;
     swapchain_create_info.imageExtent = swapchain_extent;
     swapchain_create_info.imageArrayLayers = 1;
     swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -389,143 +381,79 @@ vutil_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface
     return VUR_SUCCESS;
 }
 
-// VuResult
-// vutil_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, uint32_t* image_count)
-// {
-//     VkResult result = vkGetSwapchainImagesKHR(device, swapchain, image_count, NULL);
-//     if (result) {
-//         fprintf(stderr, "Failed to get swapchain images\n");
-//         abort();
-//     }
-
-//     VkImage swapchain_images[*image_count];
-//     result = vkGetSwapchainImagesKHR(device, swapchain, image_count, swapchain_images);
-//     if (result) {
-//         fprintf(stderr, "Failed to get swapchain images\n");
-//         abort();
-//     }
-
-//     swapchain_buffers = malloc(*image_count * sizeof(*swapchain_buffers));
-//     for (uint32_t i = 0; i < *image_count; ++i) {
-//         swapchain_buffers[i].image = swapchain_images[i];
-
-//         VkImageViewCreateInfo image_view_create_info;
-//         image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-//         image_view_create_info.pNext = NULL;
-//         image_view_create_info.flags = 0;
-//         image_view_create_info.image = swapchain_buffers[i].image;
-//         image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-//         image_view_create_info.format = format;
-//         image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-//         image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-//         image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-//         image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-//         image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-//         image_view_create_info.subresourceRange.baseMipLevel = 0;
-//         image_view_create_info.subresourceRange.levelCount = 1;
-//         image_view_create_info.subresourceRange.baseArrayLayer = 0;
-//         image_view_create_info.subresourceRange.layerCount = 1;
-
-//         result = vkCreateImageView(device, &image_view_create_info, NULL, &swapchain_buffers[i].view);
-//         if (result) {
-//             printf("Faild to create image view in loop: %d\n", i);
-//         }
-//     }
-// }
+VuResult
+vut_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, VkFormat format, uint32_t* image_count)
+{
+    return VUR_SUCCESS;
+}
 
 VuResult
-vutil_init_render_pass(VkDevice device, VkSwapchainKHR swapchain, VkRenderPass* renderpass)
+vut_init_render_pass(VkDevice device, VkFormat format, VkRenderPass* render_pass)
 {
-    VkRenderPass* render_pass;
-
-    // Render pass
-    VkSemaphore image_acquired_semaphore;
-    VkSemaphoreCreateInfo image_acquired_semaphore_create_info;
-    image_acquired_semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    image_acquired_semaphore_create_info.pNext = NULL;
-    image_acquired_semaphore_create_info.flags = 0;
-
-    VkResult result;
-    result =
-        vkCreateSemaphore(device, &image_acquired_semaphore_create_info, NULL, &image_acquired_semaphore);
-    if (result != VK_SUCCESS) {
-        fprintf(stderr, "Failed to create semaphore: %d\n", result);
-        abort();
-    }
-
-    uint32_t current_buffer;
-    result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE,
-                                   &current_buffer);
-
-    if (result != VK_SUCCESS) {
-        fprintf(stderr, "Failed to acquire next image: %d\n", result);
-        abort();
-    }
-
-    // The initial layout for the color and depth attachments will be
-    // LAYOUT_UNDEFINED because at the start of the renderpass, we don't
-    // care about their contents. At the start of the subpass, the color
-    // attachment's layout will be transitioned to
-    // LAYOUT_COLOR_ATTACHMENT_OPTIMAL and the depth stencil attachment's layout
-    // will be transitioned to LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL.  At the
-    // end of the renderpass, the color attachment's layout will be transitioned
-    // to LAYOUT_PRESENT_SRC_KHR to be ready to present.  This is all done as
-    // part of the renderpass, no barriers are necessary.
-    VkAttachmentDescription attachments[2];
-    // attachments[0].format = format;
-    // attachments[0].samples = NUM_SAMPLES;
+    VkAttachmentDescription attachments[1] = {};
+    attachments[0].format = format;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    attachments[0].flags = 0;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-    // attachments[1].format = depthStencilContext.format;
-    // attachments[1].samples = NUM_SAMPLES;
-    attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-    attachments[1].flags = 0;
+    VkAttachmentReference colorAttachments = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
-    VkAttachmentReference color_reference;
-    color_reference.attachment = 0;
-    color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depth_reference;
-    depth_reference.attachment = 1;
-    depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass;
+    VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.flags = 0;
-    subpass.inputAttachmentCount = 0;
-    subpass.pInputAttachments = NULL;
     subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &color_reference;
-    subpass.pResolveAttachments = NULL;
-    subpass.pDepthStencilAttachment = &depth_reference;
-    subpass.preserveAttachmentCount = 0;
-    subpass.pPreserveAttachments = NULL;
+    subpass.pColorAttachments = &colorAttachments;
 
-    VkRenderPassCreateInfo render_pass_create_info;
-    render_pass_create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    render_pass_create_info.pNext = NULL;
-    render_pass_create_info.attachmentCount = 2;
-    render_pass_create_info.pAttachments = attachments;
-    render_pass_create_info.subpassCount = 1;
-    render_pass_create_info.pSubpasses = &subpass;
-    render_pass_create_info.dependencyCount = 0;
-    render_pass_create_info.pDependencies = NULL;
+    VkRenderPassCreateInfo createInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
+    createInfo.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+    createInfo.pAttachments = attachments;
+    createInfo.subpassCount = 1;
+    createInfo.pSubpasses = &subpass;
 
-    result = vkCreateRenderPass(device, &render_pass_create_info, NULL, render_pass);
+    VkResult result = vkCreateRenderPass(device, &createInfo, 0, render_pass);
     if (result) {
         // Error
     }
 
     return VUR_SUCCESS;
+}
+
+VkFramebuffer
+createFramebuffer(VkDevice device, VkRenderPass renderPass, VkImageView image_view, GLFWwindow* window,
+                  VkFramebuffer* framebuffer)
+{
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+
+    VkFramebufferCreateInfo createInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+    createInfo.renderPass = renderPass;
+    createInfo.attachmentCount = 1;
+    createInfo.pAttachments = &image_view;
+    createInfo.width = (uint32_t)width;
+    createInfo.height = (uint32_t)height;
+    createInfo.layers = 1;
+
+    VkResult result = vkCreateFramebuffer(device, &createInfo, 0, framebuffer);
+    if (result) {
+        // Error
+    }
+}
+
+VkSubmitInfo
+vut_create_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete)
+{
+    VkPipelineStageFlags flags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+    VkSubmitInfo submit_info = {};
+    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submit_info.pWaitDstStageMask = flags;
+    submit_info.waitSemaphoreCount = 1;
+    submit_info.pWaitSemaphores = present_complete;
+    submit_info.signalSemaphoreCount = 1;
+    submit_info.pSignalSemaphores = render_complete;
+
+    return submit_info;
 }

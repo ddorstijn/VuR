@@ -9,6 +9,9 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(extern/glfw3)
 
+# GLM
+add_subdirectory(extern/cglm)
+
 add_subdirectory(src)
 add_subdirectory(app)
 
