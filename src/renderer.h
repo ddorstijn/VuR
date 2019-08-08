@@ -1,6 +1,9 @@
 #ifndef RENDERER_H
 #define RENDERER_H
 
+#define GLFW_INCLUDE_VULKAN
+#include "GLFW/glfw3.h"
+
 // TODO: Fix
 #include "../extern/cglm/include/cglm/cglm.h"
 
@@ -49,7 +52,7 @@ typedef struct
     bool is_minimized;
 
     GLFWwindow* window;
-    char* name;
+    const char* name;
 
     VkInstance instance;
     VkPhysicalDevice gpu;

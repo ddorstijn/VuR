@@ -69,8 +69,11 @@ vut_init_instance(const char* app_name, VkInstance* instance)
 }
 
 VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_t* queue_family_count,
-                             uint32_t* graphics_queue_family_index, uint32_t* present_queue_family_index,
+vut_get_queue_family_indices(VkPhysicalDevice gpu,
+                             VkSurfaceKHR surface,
+                             uint32_t* queue_family_count,
+                             uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index,
                              bool* separate_present_queue)
 {
     // Retrieve count by passing NULL
@@ -120,9 +123,9 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_
         // Error
     }
 
-    graphics_queue_family_index = graphicsQueueFamilyIndex;
-    present_queue_family_index = presentQueueFamilyIndex;
-    separate_present_queue = (graphics_queue_family_index != present_queue_family_index);
+    *graphics_queue_family_index = graphicsQueueFamilyIndex;
+    *present_queue_family_index = presentQueueFamilyIndex;
+    *separate_present_queue = (graphics_queue_family_index != present_queue_family_index);
 }
 
 VuResult
@@ -164,7 +167,8 @@ vut_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, Vk
 }
 
 VuResult
-vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
+vut_get_physical_devices(VkInstance instance,
+                         uint32_t* physical_device_count,
                          VkPhysicalDevice** physical_devices)
 {
     // Get the number of devices (GPUs) available.
@@ -178,7 +182,8 @@ vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
     }
 
     // Allocate space and get the list of devices.
-    *physical_devices = (VkPhysicalDevice*)malloc(*physical_device_count * sizeof **physical_devices);
+    *physical_devices =
+      (VkPhysicalDevice*)malloc(*physical_device_count * sizeof **physical_devices);
     if (*physical_devices == NULL) {
         fprintf(stderr, "Couldn't allocate memory for physical device list\n");
         abort();
@@ -194,23 +199,22 @@ vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
 }
 
 VuResult
-vut_pick_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_device_count,
-                         uint32_t* physical_device_index)
+vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalDevice* gpu)
 {
     int discrete_device_index = -1;
     int intergrated_device_index = -1;
 
-    for (int i = 0; i < physical_device_count; i++) {
+    for (int i = 0; i < gpu_count; i++) {
         uint32_t queue_family_count = 0;
         // Passing in NULL reference sets queue_family_count to the amount of
         // families
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, NULL);
+        vkGetPhysicalDeviceQueueFamilyProperties(gpus[i], &queue_family_count, NULL);
 
         // Allocate the memory for the amount of queue families
         VkQueueFamilyProperties queue_properties[queue_family_count];
 
         // Fill the queue family properties array
-        vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[i], &queue_family_count, queue_properties);
+        vkGetPhysicalDeviceQueueFamilyProperties(gpus[i], &queue_family_count, queue_properties);
 
         // Get the first family which supports graphics
         for (uint32_t j = 0; j < queue_family_count; j++) {
@@ -218,7 +222,7 @@ vut_pick_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_d
                 // Check if the device is discrete or intergrated (we want to
                 // default to discrete)
                 VkPhysicalDeviceProperties properties;
-                vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+                vkGetPhysicalDeviceProperties(gpus[i], &properties);
 
                 // Determine the type of the physical device
                 if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -234,9 +238,9 @@ vut_pick_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_d
         }
 
         if (discrete_device_index != -1) {
-            *physical_device_index = discrete_device_index;
+            *gpu = gpus[discrete_device_index];
         } else if (intergrated_device_index != -1) {
-            *physical_device_index = intergrated_device_index;
+            *gpu = gpus[intergrated_device_index];
         } else {
             return VUR_PHYSICIAL_DEVICE_CREATION_FAILED;
         }
@@ -295,7 +299,47 @@ vut_create_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* c
 }
 
 VuResult
-vut_get_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format, VkColorSpaceKHR* color_space)
+vut_alloc_command_buffer(VkDevice device,
+                         VkCommandPool command_pool,
+                         VkCommandBuffer* command_buffer)
+{
+    VkCommandBufferAllocateInfo alloc_info;
+    alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc_info.pNext = NULL;
+    alloc_info.commandPool = command_pool;
+    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc_info.commandBufferCount = 1;
+
+    VkResult result = vkAllocateCommandBuffers(device, &alloc_info, command_buffer);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_begin_command_buffer(VkCommandBuffer command_buffer)
+{
+    VkCommandBufferBeginInfo buffer_begin_info;
+    buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    buffer_begin_info.pNext = NULL;
+    buffer_begin_info.flags = 0;
+    buffer_begin_info.pInheritanceInfo = NULL;
+
+    VkResult result = vkBeginCommandBuffer(command_buffer, &buffer_begin_info);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_get_format(VkPhysicalDevice gpu,
+               VkSurfaceKHR surface,
+               VkFormat* format,
+               VkColorSpaceKHR* color_space)
 {
     // Get the list of VkFormat's that are supported:
     uint32_t format_count;
@@ -324,11 +368,17 @@ vut_get_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format, VkC
 }
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
-                   VkSwapchainKHR* swapchain, VkFormat* format, VkColorSpaceKHR* color_space)
+vut_init_swapchain(VkPhysicalDevice gpu,
+                   VkDevice device,
+                   VkSurfaceKHR surface,
+                   GLFWwindow* window,
+                   VkSwapchainKHR* swapchain,
+                   VkFormat* format,
+                   VkColorSpaceKHR* color_space)
 {
     VkSurfaceCapabilitiesKHR surface_capabilities;
-    VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
+    VkResult result =
+      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
     if (result) {
         fprintf(stderr, "error getting surface capabilties\n");
         abort();
@@ -343,7 +393,8 @@ vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, 
 
     VkPresentModeKHR present_modes[present_mode_count];
 
-    result = vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &present_mode_count, present_modes);
+    result =
+      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &present_mode_count, present_modes);
     if (result) {
         fprintf(stderr, "Error filling present modes\n");
         abort();
@@ -397,7 +448,8 @@ vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, 
     // 1 presentable image as long as we present it before attempting
     // to acquire another.
     uint32_t image_count = surface_capabilities.minImageCount + 1;
-    if ((surface_capabilities.maxImageCount > 0) && (image_count > surface_capabilities.maxImageCount)) {
+    if ((surface_capabilities.maxImageCount > 0) &&
+        (image_count > surface_capabilities.maxImageCount)) {
         image_count = surface_capabilities.maxImageCount;
     }
 
@@ -472,7 +524,10 @@ vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, 
 }
 
 VuResult
-vut_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, VkFormat format, uint32_t* image_count)
+vut_init_swapchain_images(VkDevice device,
+                          VkSwapchainKHR swapchain,
+                          VkFormat format,
+                          uint32_t* image_count)
 {
     return VUR_SUCCESS;
 }
@@ -512,7 +567,10 @@ vut_init_render_pass(VkDevice device, VkFormat format, VkRenderPass* render_pass
 }
 
 VkFramebuffer
-createFramebuffer(VkDevice device, VkRenderPass renderPass, VkImageView image_view, GLFWwindow* window,
+createFramebuffer(VkDevice device,
+                  VkRenderPass renderPass,
+                  VkImageView image_view,
+                  GLFWwindow* window,
                   VkFramebuffer* framebuffer)
 {
     int width, height;

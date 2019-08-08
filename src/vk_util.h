@@ -28,24 +28,35 @@ VuResult
 vut_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device);
 
 VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface, uint32_t* queue_family_count,
-                             uint32_t* graphics_queue_family_index, uint32_t* present_queue_family_index,
+vut_get_queue_family_indices(VkPhysicalDevice gpu,
+                             VkSurfaceKHR surface,
+                             uint32_t* queue_family_count,
+                             uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index,
                              bool* separate_present_queue);
 
 VuResult
-vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
+vut_get_physical_devices(VkInstance instance,
+                         uint32_t* physical_device_count,
                          VkPhysicalDevice** physical_devices);
 
 VuResult
-vut_pick_physical_device(VkPhysicalDevice* physical_devices, uint32_t physical_device_count,
-                         uint32_t* physical_device_index);
+vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalDevice* gpu);
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
-                   VkSwapchainKHR* swapchain, VkFormat* format, VkColorSpaceKHR* color_space);
+vut_init_swapchain(VkPhysicalDevice gpu,
+                   VkDevice device,
+                   VkSurfaceKHR surface,
+                   GLFWwindow* window,
+                   VkSwapchainKHR* swapchain,
+                   VkFormat* format,
+                   VkColorSpaceKHR* color_space);
 
 VuResult
-vut_init_swapchain_images(VkDevice device, VkSwapchainKHR swapchain, VkFormat format, uint32_t* image_count);
+vut_init_swapchain_images(VkDevice device,
+                          VkSwapchainKHR swapchain,
+                          VkFormat format,
+                          uint32_t* image_count);
 
 VuResult
 vut_create_semaphore(VkDevice device, VkSemaphore* semaphore);
@@ -58,5 +69,13 @@ vut_create_submit_info(VkSemaphore* present_complete, VkSemaphore* render_comple
 
 VuResult
 vut_create_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool);
+
+VuResult
+vut_alloc_command_buffer(VkDevice device,
+                         VkCommandPool command_pool,
+                         VkCommandBuffer* command_buffer);
+
+VuResult
+vut_begin_command_buffer(VkCommandBuffer command_buffer);
 
 #endif // HELPER_H

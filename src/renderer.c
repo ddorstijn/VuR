@@ -25,9 +25,12 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
     vut_pick_physical_device(gpus, gpu_count, &ctx->gpu);
 
     // Get a queue which supports graphics and create a logical device
-    vut_get_queue_family_indices(ctx->gpu, ctx->surface, &ctx->queue_family_count,
-                                 &ctx->graphics_queue_family_index, &ctx->present_queue_family_index,
-                                 ctx->separate_present_queue);
+    vut_get_queue_family_indices(ctx->gpu,
+                                 ctx->surface,
+                                 &ctx->queue_family_count,
+                                 &ctx->graphics_queue_family_index,
+                                 &ctx->present_queue_family_index,
+                                 &ctx->separate_present_queue);
 
     vut_create_device(ctx->gpu, ctx->graphics_queue_family_index, &ctx->device);
 
@@ -62,6 +65,8 @@ vur_prepare_buffers(VulkanContext* ctx)
     if (ctx->command_pool == VK_NULL_HANDLE) {
         vut_create_command_pool(ctx->device, ctx->graphics_queue_family_index, &ctx->command_pool);
     }
+
+    vut_alloc_command_buffer(ctx->device, ctx->command_pool, &ctx->command_buffer);
 }
 
 // Main render loop
