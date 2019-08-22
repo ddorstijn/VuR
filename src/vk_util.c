@@ -690,14 +690,16 @@ vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool
 
 VuResult
 vut_init_descriptor_set(VkDevice device,
+                        VkSampler sampler,
+                        VkImageView view,
                         VkDescriptorPool pool,
                         VkDescriptorSetLayout* layout,
-                        uint32_t image_count)
+                        VkDescriptorSet* set)
 {
     VkDescriptorImageInfo tex_descs[DEMO_TEXTURE_COUNT];
     VkWriteDescriptorSet writes[2];
 
-    VkDescriptorSetAllocateInfo alloc_info = {
+    const VkDescriptorSetAllocateInfo alloc_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .pNext = NULL,
         .descriptorPool = pool,
@@ -705,16 +707,15 @@ vut_init_descriptor_set(VkDevice device,
         .pSetLayouts = layout,
     };
 
-    VkDescriptorBufferInfo buffer_info;
-    buffer_info.offset = 0;
-    buffer_info.range = sizeof(struct vktexcube_vs_uniform);
+    VkDescriptorBufferInfo buffer_info = {
+        .offset = 0,
+        .range = sizeof(struct vktexcube_vs_uniform),
+    };
 
-    memset(&tex_descs, 0, sizeof(tex_descs));
-    for (unsigned int i = 0; i < DEMO_TEXTURE_COUNT; i++) {
-        tex_descs[i].sampler = demo->textures[i].sampler;
-        tex_descs[i].imageView = demo->textures[i].view;
-        tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    }
+    tex_descs[i].sampler = sampler;
+    tex_descs[i].imageView = view;
+    tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -727,12 +728,15 @@ vut_init_descriptor_set(VkDevice device,
     writes[1].pImageInfo = tex_descs;
 
     for (unsigned int i = 0; i < image_count; i++) {
-        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &);
-        assert(!err);
-        buffer_info.buffer = demo->swapchain_image_resources[i].uniform_buffer;
-        writes[0].dstSet = demo->swapchain_image_resources[i].descriptor_set;
-        writes[1].dstSet = demoswapchain_image_resources[i].descriptor_set;
-        vkUpdateDescriptorSets(demo->device, 2, writes, 0, NULL);
+        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, set);
+        if (result) {
+            // Error
+        }
+
+        buffer_info.buffer = swapchain_image_resources[i].uniform_buffer;
+        writes[0].dstSet = swapchain_image_resources[i].descriptor_set;
+        writes[1].dstSet = swapchain_image_resources[i].descriptor_set;
+        vkUpdateDescriptorSets(device, 2, writes, 0, NULL);
     }
 }
 
