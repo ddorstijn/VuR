@@ -5,6 +5,8 @@
         "cglm.h": "c",
         "stdbool.h": "c",
         "vk_sdk_platform.h": "c",
-        "*.tcc": "c"
+        "*.tcc": "c",
+        "vk_util.h": "c",
+        "glfw3.h": "c"
     }
 }
