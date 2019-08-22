@@ -6,6 +6,9 @@
 
 #define ENABLE_DEBUG 1
 
+// Helper function (WARNING: DO NOT USE WITH FUNCTION POINTERS, HELL WILL BEFALL ALL)
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
 VuResult
 vut_init_window(const char* app_name, GLFWwindow** window)
 {
@@ -32,33 +35,36 @@ VuResult
 vut_init_instance(const char* app_name, VkInstance* instance)
 {
     // Create app info for Vulkan
-    VkApplicationInfo app_info;
-    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    app_info.pApplicationName = app_name;
-    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    app_info.apiVersion = VK_API_VERSION_1_0;
-    app_info.pEngineName = "No Engine";
+    const VkApplicationInfo app_info = {
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = app_name,
+        .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+        .apiVersion = VK_API_VERSION_1_0,
+        .pEngineName = "No Engine",
+    };
 
     // Get required extensions from GLFW
     uint32_t extension_count;
     const char* const* extensions = glfwGetRequiredInstanceExtensions(&extension_count);
 
-    // Create vut instance
-    VkInstanceCreateInfo instance_info;
-    instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    instance_info.pNext = NULL;
-    instance_info.flags = 0;
-    instance_info.pApplicationInfo = &app_info;
-    instance_info.enabledExtensionCount = extension_count;
-    instance_info.ppEnabledExtensionNames = extensions;
-
 #ifdef ENABLE_DEBUG
     // Add debug layer to enabled layers
     const char* debug_layers[] = { "VK_LAYER_LUNARG_standard_validation" };
-
-    instance_info.ppEnabledLayerNames = debug_layers;
-    instance_info.enabledLayerCount = sizeof(debug_layers) / sizeof(debug_layers[0]);
 #endif
+
+    // Create vut instance
+    const VkInstanceCreateInfo instance_info = {
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .pApplicationInfo = &app_info,
+        .enabledExtensionCount = extension_count,
+        .ppEnabledExtensionNames = extensions,
+#ifdef ENABLE_DEBUG
+        .ppEnabledLayerNames = debug_layers,
+        .enabledLayerCount = ARRAY_SIZE(debug_layers),
+#endif
+    };
 
     VkResult result = vkCreateInstance(&instance_info, NULL, instance);
     if (result) {
@@ -129,33 +135,35 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu,
 }
 
 VuResult
-vut_create_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device)
+vut_init_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device)
 {
     // When using a single queue no priority is required
     float queue_priority[1] = { 1.0 };
 
-    VkDeviceQueueCreateInfo queue_info;
-    queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-    queue_info.pNext = NULL;
-    queue_info.flags = 0;
-    queue_info.queueFamilyIndex = graphics_queue_family_index;
-    queue_info.queueCount = 1;
-    queue_info.pQueuePriorities = queue_priority;
+    const VkDeviceQueueCreateInfo queue_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueFamilyIndex = graphics_queue_family_index,
+        .queueCount = 1,
+        .pQueuePriorities = queue_priority,
+    };
 
     // Device needs swapchain for displaying graphics
     const char* device_extensions[1] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-    VkDeviceCreateInfo device_info;
-    device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-    device_info.pNext = NULL;
-    device_info.flags = 0;
-    device_info.queueCreateInfoCount = 1;
-    device_info.pQueueCreateInfos = &queue_info;
-    device_info.enabledExtensionCount = 1;
-    device_info.ppEnabledExtensionNames = device_extensions;
-    device_info.enabledLayerCount = 0;
-    device_info.ppEnabledLayerNames = NULL;
-    device_info.pEnabledFeatures = NULL;
+    const VkDeviceCreateInfo device_info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue_info,
+        .enabledExtensionCount = 1,
+        .ppEnabledExtensionNames = device_extensions,
+        .enabledLayerCount = 0,
+        .ppEnabledLayerNames = NULL,
+        .pEnabledFeatures = NULL,
+    };
 
     VkResult result = vkCreateDevice(gpu, &device_info, NULL, device);
     if (result) {
@@ -250,12 +258,13 @@ vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalD
 }
 
 VuResult
-vut_create_semaphore(VkDevice device, VkSemaphore* semaphore)
+vut_init_semaphore(VkDevice device, VkSemaphore* semaphore)
 {
-    VkSemaphoreCreateInfo semaphore_info;
-    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-    semaphore_info.pNext = NULL;
-    semaphore_info.flags = 0;
+    const VkSemaphoreCreateInfo semaphore_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+    };
 
     VkResult result = vkCreateSemaphore(device, &semaphore_info, NULL, semaphore);
     if (result) {
@@ -266,12 +275,13 @@ vut_create_semaphore(VkDevice device, VkSemaphore* semaphore)
 }
 
 VuResult
-vut_create_fence(VkDevice device, VkFence* fence)
+vut_init_fence(VkDevice device, VkFence* fence)
 {
-    VkFenceCreateInfo fence_info;
-    fence_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-    fence_info.pNext = NULL;
-    fence_info.flags = 0;
+    const VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+    };
 
     VkResult result = vkCreateFence(device, &fence_info, NULL, fence);
     if (result) {
@@ -282,13 +292,14 @@ vut_create_fence(VkDevice device, VkFence* fence)
 }
 
 VuResult
-vut_create_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
+vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
 {
-    VkCommandPoolCreateInfo command_pool_info;
-    command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    command_pool_info.pNext = NULL;
-    command_pool_info.flags = 0;
-    command_pool_info.queueFamilyIndex = family_index;
+    const VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueFamilyIndex = family_index,
+    };
 
     VkResult result = vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
     if (result) {
@@ -303,12 +314,13 @@ vut_alloc_command_buffer(VkDevice device,
                          VkCommandPool command_pool,
                          VkCommandBuffer* command_buffer)
 {
-    VkCommandBufferAllocateInfo alloc_info;
-    alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    alloc_info.pNext = NULL;
-    alloc_info.commandPool = command_pool;
-    alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    alloc_info.commandBufferCount = 1;
+    const VkCommandBufferAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
 
     VkResult result = vkAllocateCommandBuffers(device, &alloc_info, command_buffer);
     if (result) {
@@ -321,11 +333,12 @@ vut_alloc_command_buffer(VkDevice device,
 VuResult
 vut_begin_command_buffer(VkCommandBuffer command_buffer)
 {
-    VkCommandBufferBeginInfo buffer_begin_info;
-    buffer_begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    buffer_begin_info.pNext = NULL;
-    buffer_begin_info.flags = 0;
-    buffer_begin_info.pInheritanceInfo = NULL;
+    const VkCommandBufferBeginInfo buffer_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .pInheritanceInfo = NULL,
+    };
 
     VkResult result = vkBeginCommandBuffer(command_buffer, &buffer_begin_info);
     if (result) {
@@ -376,6 +389,8 @@ vut_init_swapchain(VkPhysicalDevice gpu,
                    VkFormat* format,
                    VkColorSpaceKHR* color_space)
 {
+    VkSwapchainKHR old_swapchain = *swapchain;
+
     VkSurfaceCapabilitiesKHR surface_capabilities;
     VkResult result =
       vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
@@ -453,12 +468,12 @@ vut_init_swapchain(VkPhysicalDevice gpu,
         image_count = surface_capabilities.maxImageCount;
     }
 
-    VkSurfaceTransformFlagBitsKHR preTransform;
+    VkSurfaceTransformFlagBitsKHR pre_transform;
     if (surface_capabilities.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR) {
         // Prefer non-rotated transformation
-        preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        pre_transform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
     } else {
-        preTransform = surface_capabilities.currentTransform;
+        pre_transform = surface_capabilities.currentTransform;
     }
 
     // Find a supported composite alpha mode - one of these is guaranteed to be
@@ -471,48 +486,33 @@ vut_init_swapchain(VkPhysicalDevice gpu,
         VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
     };
 
-    for (uint32_t i = 0; i < sizeof(composite_alpha_flags); i++) {
+    for (uint32_t i = 0; i < 4; i++) {
         if (surface_capabilities.supportedCompositeAlpha & composite_alpha_flags[i]) {
             composite_alpha = composite_alpha_flags[i];
             break;
         }
     }
 
-    // Get the list of VkFormat's that are supported:
-    uint32_t format_count;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, NULL);
-
-    VkSurfaceFormatKHR surface_formats[format_count];
-    vkGetPhysicalDeviceSurfaceFormatsKHR(gpu, surface, &format_count, surface_formats);
-    // If the format list includes just one entry of VK_FORMAT_UNDEFINED,
-    // the surface has no preferred format.  Otherwise, at least one
-    // supported format will be returned.
-    if (format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED) {
-        *format = VK_FORMAT_B8G8R8A8_UNORM;
-    } else {
-        *format = surface_formats[0].format;
-    }
-    *color_space = surface_formats[0].colorSpace;
-
-    VkSwapchainCreateInfoKHR swapchain_create_info;
-    swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapchain_create_info.pNext = NULL;
-    swapchain_create_info.flags = 0;
-    swapchain_create_info.surface = surface;
-    swapchain_create_info.minImageCount = image_count;
-    swapchain_create_info.imageFormat = *format;
-    swapchain_create_info.imageColorSpace = *color_space;
-    swapchain_create_info.imageExtent = swapchain_extent;
-    swapchain_create_info.imageArrayLayers = 1;
-    swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    swapchain_create_info.queueFamilyIndexCount = 0;
-    swapchain_create_info.pQueueFamilyIndices = NULL;
-    swapchain_create_info.preTransform = preTransform;
-    swapchain_create_info.compositeAlpha = composite_alpha;
-    swapchain_create_info.presentMode = swapchain_present_mode;
-    swapchain_create_info.clipped = VK_TRUE;
-    swapchain_create_info.oldSwapchain = VK_NULL_HANDLE;
+    const VkSwapchainCreateInfoKHR swapchain_create_info = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .pNext = NULL,
+        .flags = 0,
+        .surface = surface,
+        .minImageCount = image_count,
+        .imageFormat = *format,
+        .imageColorSpace = *color_space,
+        .imageExtent = swapchain_extent,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = NULL,
+        .preTransform = pre_transform,
+        .compositeAlpha = composite_alpha,
+        .presentMode = swapchain_present_mode,
+        .clipped = VK_TRUE,
+        .oldSwapchain = old_swapchain,
+    };
 
     result = vkCreateSwapchainKHR(device, &swapchain_create_info, NULL, swapchain);
     if (result) {
@@ -520,45 +520,35 @@ vut_init_swapchain(VkPhysicalDevice gpu,
         abort();
     }
 
+    // If we just re-created an existing swapchain, we should destroy the old
+    // swapchain at this point.
+    // Note: destroying the swapchain also cleans up all its associated
+    // presentable images once the platform is done with them.
+    if (old_swapchain != VK_NULL_HANDLE) {
+        vkDestroySwapchainKHR(device, old_swapchain, NULL);
+    }
+
     return VUR_SUCCESS;
 }
 
 VuResult
-vut_init_swapchain_images(VkDevice device,
-                          VkSwapchainKHR swapchain,
-                          VkFormat format,
-                          uint32_t* image_count)
+vut_init_image(VkDevice device, VkFormat format, uint32_t width, uint32_t height, VkImage* image)
 {
-    return VUR_SUCCESS;
-}
+    const VkImageCreateInfo image_info = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .pNext = NULL,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = format,
+        .extent = { width, height, 1 },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        .flags = 0,
+    };
 
-VuResult
-vut_init_render_pass(VkDevice device, VkFormat format, VkRenderPass* render_pass)
-{
-    VkAttachmentDescription attachments[1] = {};
-    attachments[0].format = format;
-    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorAttachments = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachments;
-
-    VkRenderPassCreateInfo createInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
-    createInfo.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
-    createInfo.pAttachments = attachments;
-    createInfo.subpassCount = 1;
-    createInfo.pSubpasses = &subpass;
-
-    VkResult result = vkCreateRenderPass(device, &createInfo, 0, render_pass);
+    VkResult result = vkCreateImage(device, &image_info, NULL, image);
     if (result) {
         // Error
     }
@@ -566,42 +556,353 @@ vut_init_render_pass(VkDevice device, VkFormat format, VkRenderPass* render_pass
     return VUR_SUCCESS;
 }
 
-VkFramebuffer
-createFramebuffer(VkDevice device,
-                  VkRenderPass renderPass,
-                  VkImageView image_view,
-                  GLFWwindow* window,
-                  VkFramebuffer* framebuffer)
+VuResult
+vut_init_image_view(VkDevice device,
+                    VkFormat format,
+                    VkImage swapchain_image,
+                    VkImageView* image_view,
+                    bool is_depth)
 {
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
+    const VkImageSubresourceRange range = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
 
-    VkFramebufferCreateInfo createInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-    createInfo.renderPass = renderPass;
-    createInfo.attachmentCount = 1;
-    createInfo.pAttachments = &image_view;
-    createInfo.width = (uint32_t)width;
-    createInfo.height = (uint32_t)height;
-    createInfo.layers = 1;
+    const VkComponentMapping components = {
+        .r = VK_COMPONENT_SWIZZLE_R,
+        .g = VK_COMPONENT_SWIZZLE_G,
+        .b = VK_COMPONENT_SWIZZLE_B,
+        .a = VK_COMPONENT_SWIZZLE_A,
+    };
 
-    VkResult result = vkCreateFramebuffer(device, &createInfo, 0, framebuffer);
+    const VkImageViewCreateInfo color_image_view = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .format = format,
+        .components = components,
+        .subresourceRange = range,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .image = swapchain_image,
+    };
+
+    VkResult result = vkCreateImageView(device, &color_image_view, NULL, image_view);
     if (result) {
         // Error
     }
+
+    return VUR_SUCCESS;
 }
 
-VkSubmitInfo
-vut_create_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete)
-{
-    VkPipelineStageFlags flags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+VuResult
+vut_init_pipeline(VkPipelineLayout pipeline_layout)
+{}
 
-    VkSubmitInfo submit_info = {};
-    submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submit_info.pWaitDstStageMask = flags;
-    submit_info.waitSemaphoreCount = 1;
-    submit_info.pWaitSemaphores = present_complete;
-    submit_info.signalSemaphoreCount = 1;
-    submit_info.pSignalSemaphores = render_complete;
+VuResult
+vut_init_pipeline_layout(VkDevice device,
+                         VkDescriptorSetLayout* descriptor_layout,
+                         VkPipelineLayout* pipeline_layout)
+{
+    const VkPipelineLayoutCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .setLayoutCount = 1,
+        .pSetLayouts = descriptor_layout,
+    };
+
+    VkResult result = vkCreatePipelineLayout(device, &create_info, NULL, pipeline_layout);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_descriptor_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout)
+{
+    const VkDescriptorSetLayoutBinding layout_bindings[2] = {
+        [0] =
+          {
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .pImmutableSamplers = NULL,
+          },
+        [1] =
+          {
+            .binding = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = DEMO_TEXTURE_COUNT,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .pImmutableSamplers = NULL,
+          },
+    };
+    const VkDescriptorSetLayoutCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .bindingCount = 2,
+        .pBindings = layout_bindings,
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(device, &create_info, NULL, descriptor_layout);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool* descriptor_pool)
+{
+    const VkDescriptorPoolSize type_counts[2] = {
+        [0] =
+          {
+            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = image_count,
+          },
+        [1] =
+          {
+            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = image_count * DEMO_TEXTURE_COUNT,
+          },
+    };
+    const VkDescriptorPoolCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .maxSets = image_count,
+        .poolSizeCount = 2,
+        .pPoolSizes = type_counts,
+    };
+
+    VkResult result = vkCreateDescriptorPool(device, &create_info, NULL, descriptor_pool);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_descriptor_set(VkDevice device,
+                        VkDescriptorPool pool,
+                        VkDescriptorSetLayout* layout,
+                        uint32_t image_count)
+{
+    VkDescriptorImageInfo tex_descs[DEMO_TEXTURE_COUNT];
+    VkWriteDescriptorSet writes[2];
+
+    VkDescriptorSetAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext = NULL,
+        .descriptorPool = pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = layout,
+    };
+
+    VkDescriptorBufferInfo buffer_info;
+    buffer_info.offset = 0;
+    buffer_info.range = sizeof(struct vktexcube_vs_uniform);
+
+    memset(&tex_descs, 0, sizeof(tex_descs));
+    for (unsigned int i = 0; i < DEMO_TEXTURE_COUNT; i++) {
+        tex_descs[i].sampler = demo->textures[i].sampler;
+        tex_descs[i].imageView = demo->textures[i].view;
+        tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &buffer_info;
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstBinding = 1;
+    writes[1].descriptorCount = DEMO_TEXTURE_COUNT;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[1].pImageInfo = tex_descs;
+
+    for (unsigned int i = 0; i < image_count; i++) {
+        VkResult result = vkAllocateDescriptorSets(device, &alloc_info, &);
+        assert(!err);
+        buffer_info.buffer = demo->swapchain_image_resources[i].uniform_buffer;
+        writes[0].dstSet = demo->swapchain_image_resources[i].descriptor_set;
+        writes[1].dstSet = demoswapchain_image_resources[i].descriptor_set;
+        vkUpdateDescriptorSets(demo->device, 2, writes, 0, NULL);
+    }
+}
+
+VuResult
+vut_init_render_pass(VkDevice device,
+                     VkFormat color_format,
+                     VkFormat depth_format,
+                     VkRenderPass* render_pass)
+{
+    const VkAttachmentDescription attachments[2] = {
+        [0] =
+          {
+            .format = color_format,
+            .flags = 0,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+          },
+        [1] =
+          {
+            .format = depth_format,
+            .flags = 0,
+            .samples = VK_SAMPLE_COUNT_1_BIT,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+          },
+    };
+    const VkAttachmentReference color_reference = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+    const VkAttachmentReference depth_reference = {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+    const VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .flags = 0,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_reference,
+        .pResolveAttachments = NULL,
+        .pDepthStencilAttachment = &depth_reference,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = NULL,
+    };
+    const VkRenderPassCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .attachmentCount = 2,
+        .pAttachments = attachments,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+        .dependencyCount = 0,
+        .pDependencies = NULL,
+    };
+
+    VkResult result = vkCreateRenderPass(device, &create_info, NULL, render_pass);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_framebuffer(VkDevice device,
+                     VkRenderPass render_pass,
+                     VkImageView depth_view,
+                     VkImageView image_view,
+                     uint32_t width,
+                     uint32_t height,
+                     VkFramebuffer* framebuffer)
+{
+    VkImageView attachments[2];
+    attachments[1] = depth_view;
+
+    const VkFramebufferCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .renderPass = render_pass,
+        .attachmentCount = 2,
+        .pAttachments = attachments,
+        .width = width,
+        .height = height,
+        .layers = 1,
+    };
+
+    attachments[0] = image_view;
+    VkResult result = vkCreateFramebuffer(device, &create_info, NULL, framebuffer);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+const VkSubmitInfo
+vut_init_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete)
+{
+    const VkPipelineStageFlags flags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+    const VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .pWaitDstStageMask = flags,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = present_complete,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = render_complete,
+    };
 
     return submit_info;
+}
+
+VuResult
+vut_build_image_ownership_cmd(VkCommandBuffer present_buffer,
+                              uint32_t graphics_queue_family_index,
+                              uint32_t present_queue_family_index,
+                              VkImage swapchain_image)
+{
+    VkResult result;
+
+    const VkCommandBufferBeginInfo cmd_buf_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
+        .pInheritanceInfo = NULL,
+    };
+    result = vkBeginCommandBuffer(present_buffer, &cmd_buf_info);
+    if (result) {
+        // Error
+    }
+
+    const VkImageMemoryBarrier image_ownership_barrier = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .pNext = NULL,
+        .srcAccessMask = 0,
+        .dstAccessMask = 0,
+        .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .srcQueueFamilyIndex = graphics_queue_family_index,
+        .dstQueueFamilyIndex = present_queue_family_index,
+        .image = swapchain_image,
+        .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+    };
+
+    vkCmdPipelineBarrier(present_buffer,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         0,
+                         0,
+                         NULL,
+                         0,
+                         NULL,
+                         1,
+                         &image_ownership_barrier);
+    result = vkEndCommandBuffer(present_buffer);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
 }

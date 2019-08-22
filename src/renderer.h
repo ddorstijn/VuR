@@ -49,7 +49,6 @@ typedef struct
     bool prepared;
     bool use_staging_buffer;
     bool separate_present_queue;
-    bool is_minimized;
 
     GLFWwindow* window;
     const char* name;
