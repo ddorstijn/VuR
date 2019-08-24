@@ -6,7 +6,9 @@
 void
 vur_init_vulkan(VulkanContext* ctx, const char* app_name)
 {
+    // Make sure the whole struct is NULL
     memset(ctx, 0, sizeof(*ctx));
+
     ctx->present_mode = VK_PRESENT_MODE_FIFO_KHR;
     ctx->name = app_name;
     ctx->pause = false;
@@ -162,9 +164,14 @@ vur_prepare_depth(VulkanContext* ctx)
 
     /* allocate memory */
     VkResult result = vkAllocateMemory(ctx->device, &ctx->depth.mem_alloc, NULL, &ctx->depth.mem);
-
+    if (result) {
+        // Error
+    }
     /* bind memory */
     result = vkBindImageMemory(ctx->device, ctx->depth.image, ctx->depth.mem, 0);
+    if (result) {
+        // Error
+    }
 
     vut_init_image_view(ctx->device, depth_format, ctx->depth.image, &ctx->depth.view, true);
 }
