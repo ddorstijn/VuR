@@ -57,9 +57,12 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
 }
 
 void
-vur_prepare_buffers(VulkanContext* ctx)
+vur_prepare_swapchain(VulkanContext* ctx)
 {
     VkResult result;
+
+    vut_init_swapchain(ctx->gpu, ctx->device, ctx->surface, ctx->window, &ctx->swapchain,
+                       ctx->format, ctx->color_space);
 
     result =
         vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count, NULL);
@@ -81,6 +84,29 @@ vur_prepare_buffers(VulkanContext* ctx)
         ctx->swapchain_image_resources[i].image = swapchain_images[i];
         vut_init_image_view(ctx->device, ctx->format, ctx->swapchain_image_resources[i].image,
                             &ctx->swapchain_image_resources[i].view, false);
+    }
+}
+
+void
+vur_prepare_buffers(VulkanContext* ctx)
+{
+    vut_init_command_pool(ctx->device, ctx->present_queue_family_index, &ctx->command_pool);
+
+    vut_alloc_command_buffer(ctx->device, ctx->command_pool, 1, &ctx->command_buffer);
+
+    if (ctx->separate_present_queue) {
+        vut_init_command_pool(ctx->device, ctx->present_queue_family_index,
+                              &ctx->present_command_pool);
+
+        for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+            vut_alloc_command_buffer(ctx->device, ctx->present_command_pool,
+                                     &ctx->swapchain_image_resources[i].graphics_to_present_cmd);
+
+            vut_build_image_ownership_cmd(ctx->swapchain_image_resources[i].graphics_to_present_cmd,
+                                          ctx->graphics_queue_family_index,
+                                          ctx->present_queue_family_index,
+                                          ctx->swapchain_image_resources[i].image);
+        }
     }
 }
 
@@ -350,15 +376,15 @@ vur_prepare_pipeline(VulkanContext* ctx)
 void
 vur_prepare(VulkanContext* ctx)
 {
-    if (ctx->command_pool == VK_NULL_HANDLE) {
-        vut_init_command_pool(ctx->device, ctx->graphics_queue_family_index, &ctx->command_pool);
-    }
 
-    vut_alloc_command_buffer(ctx->device, ctx->command_pool, &ctx->command_buffer);
     vut_begin_command_buffer(ctx->command_buffer);
 
+    vur_prepare_swapchain(ctx);
+
+    // Prepare the buffers that contain GPU data
     vur_prepare_buffers(ctx);
 
+    // Prepare GPU data
     vur_prepare_depth(ctx);
     vur_prepare_textures(ctx);
     vur_prepare_meshes(ctx);
@@ -367,26 +393,6 @@ vur_prepare(VulkanContext* ctx)
     vut_init_pipeline_layout(ctx->device, &ctx->descriptor_layout, &ctx->pipeline_layout);
     vut_init_render_pass(ctx->device, ctx->format, ctx->depth.format, &ctx->render_pass);
     vur_prepare_pipeline(ctx);
-
-    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vut_alloc_command_buffer(ctx->device, ctx->command_pool,
-                                 &ctx->swapchain_image_resources[i].cmd);
-    }
-
-    if (ctx->separate_present_queue) {
-        vut_init_command_pool(ctx->device, ctx->present_queue_family_index,
-                              &ctx->present_command_pool);
-
-        for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-            vut_alloc_command_buffer(ctx->device, ctx->present_command_pool,
-                                     &ctx->swapchain_image_resources[i].graphics_to_present_cmd);
-
-            vut_build_image_ownership_cmd(ctx->swapchain_image_resources[i].graphics_to_present_cmd,
-                                          ctx->graphics_queue_family_index,
-                                          ctx->present_queue_family_index,
-                                          ctx->swapchain_image_resources[i].image);
-        }
-    }
 
     vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
     vut_init_descriptor_set();

@@ -4,10 +4,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ENABLE_DEBUG 1
+#define DEBUG 1
 
 // Helper function (WARNING: DO NOT USE WITH FUNCTION POINTERS, HELL WILL BEFALL ALL)
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
+void
+add_debug_extensions(const char** extensions, uint32_t* extension_count)
+{
+    const char* debug[] = { VK_EXT_DEBUG_UTILS_EXTENSION_NAME };
+    uint32_t total_count = *extension_count + ARRAY_SIZE(debug);
+    extensions = malloc(total_count * sizeof *extensions);
+
+    // Fill the first port of the array with the glfw layers
+    for (uint32_t i = 0; i < *extension_count; i++) {
+        extensions[i] = glfw_extensions[i];
+    }
+
+    // And add the new debug layers
+    for (uint32_t i = *extension_count; i < total_count; i++) {
+        extensions[i] = debug[i];
+    }
+
+    *extension_count = total_count;
+}
 
 VuResult
 vut_init_window(const char* app_name, GLFWwindow** window)
@@ -37,6 +57,7 @@ vut_init_instance(const char* app_name, VkInstance* instance)
     // Create app info for Vulkan
     const VkApplicationInfo app_info = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pNext = NULL,
         .pApplicationName = app_name,
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = VK_API_VERSION_1_0,
@@ -45,14 +66,12 @@ vut_init_instance(const char* app_name, VkInstance* instance)
 
     // Get required extensions from GLFW
     uint32_t extension_count;
-    const char* const* extensions = glfwGetRequiredInstanceExtensions(&extension_count);
+    const char* extensions[] = glfwGetRequiredInstanceExtensions(&extension_count);
+#ifdef DEBUG
+    add_debug_extensions(extensions, &extension_count);
+#endif // DEBUG
 
-#ifdef ENABLE_DEBUG
-    // Add debug layer to enabled layers
-    const char* debug_layers[] = { "VK_LAYER_LUNARG_standard_validation" };
-#endif
-
-    // Create vut instance
+    // Create instance
     const VkInstanceCreateInfo instance_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = NULL,
@@ -60,9 +79,12 @@ vut_init_instance(const char* app_name, VkInstance* instance)
         .pApplicationInfo = &app_info,
         .enabledExtensionCount = extension_count,
         .ppEnabledExtensionNames = extensions,
-#ifdef ENABLE_DEBUG
-        .ppEnabledLayerNames = debug_layers,
-        .enabledLayerCount = ARRAY_SIZE(debug_layers),
+#ifdef DEBUG
+        .ppEnabledLayerNames = { "VK_LAYER_LUNARG_standard_validation" },
+        .enabledLayerCount = ARRAY_SIZE(instance_info.ppEnabledExtensionNames),
+#else
+        .ppEnabledLayerNames = NULL,
+        .enabledLayerCount = 0,
 #endif
     };
 
@@ -75,12 +97,9 @@ vut_init_instance(const char* app_name, VkInstance* instance)
 }
 
 VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu,
-                             VkSurfaceKHR surface,
-                             uint32_t* queue_family_count,
-                             uint32_t* graphics_queue_family_index,
-                             uint32_t* present_queue_family_index,
-                             bool* separate_present_queue)
+vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
+                             uint32_t* queue_family_count, uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index, bool* separate_present_queue)
 {
     // Retrieve count by passing NULL
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, NULL);
@@ -175,8 +194,7 @@ vut_init_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDe
 }
 
 VuResult
-vut_get_physical_devices(VkInstance instance,
-                         uint32_t* physical_device_count,
+vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
                          VkPhysicalDevice** physical_devices)
 {
     // Get the number of devices (GPUs) available.
@@ -191,7 +209,7 @@ vut_get_physical_devices(VkInstance instance,
 
     // Allocate space and get the list of devices.
     *physical_devices =
-      (VkPhysicalDevice*)malloc(*physical_device_count * sizeof **physical_devices);
+        (VkPhysicalDevice*)malloc(*physical_device_count * sizeof **physical_devices);
     if (*physical_devices == NULL) {
         fprintf(stderr, "Couldn't allocate memory for physical device list\n");
         abort();
@@ -310,8 +328,7 @@ vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* com
 }
 
 VuResult
-vut_alloc_command_buffer(VkDevice device,
-                         VkCommandPool command_pool,
+vut_alloc_command_buffer(VkDevice device, VkCommandPool command_pool, uint32_t count,
                          VkCommandBuffer* command_buffer)
 {
     const VkCommandBufferAllocateInfo alloc_info = {
@@ -319,7 +336,7 @@ vut_alloc_command_buffer(VkDevice device,
         .pNext = NULL,
         .commandPool = command_pool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
+        .commandBufferCount = count,
     };
 
     VkResult result = vkAllocateCommandBuffers(device, &alloc_info, command_buffer);
@@ -349,9 +366,7 @@ vut_begin_command_buffer(VkCommandBuffer command_buffer)
 }
 
 VuResult
-vut_get_format(VkPhysicalDevice gpu,
-               VkSurfaceKHR surface,
-               VkFormat* format,
+vut_get_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format,
                VkColorSpaceKHR* color_space)
 {
     // Get the list of VkFormat's that are supported:
@@ -381,19 +396,14 @@ vut_get_format(VkPhysicalDevice gpu,
 }
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu,
-                   VkDevice device,
-                   VkSurfaceKHR surface,
-                   GLFWwindow* window,
-                   VkSwapchainKHR* swapchain,
-                   VkFormat* format,
-                   VkColorSpaceKHR* color_space)
+vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
+                   VkSwapchainKHR* swapchain, VkFormat* format, VkColorSpaceKHR* color_space)
 {
     VkSwapchainKHR old_swapchain = *swapchain;
 
     VkSurfaceCapabilitiesKHR surface_capabilities;
     VkResult result =
-      vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &surface_capabilities);
     if (result) {
         fprintf(stderr, "error getting surface capabilties\n");
         abort();
@@ -409,7 +419,7 @@ vut_init_swapchain(VkPhysicalDevice gpu,
     VkPresentModeKHR present_modes[present_mode_count];
 
     result =
-      vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &present_mode_count, present_modes);
+        vkGetPhysicalDeviceSurfacePresentModesKHR(gpu, surface, &present_mode_count, present_modes);
     if (result) {
         fprintf(stderr, "Error filling present modes\n");
         abort();
@@ -557,11 +567,8 @@ vut_init_image(VkDevice device, VkFormat format, uint32_t width, uint32_t height
 }
 
 VuResult
-vut_init_image_view(VkDevice device,
-                    VkFormat format,
-                    VkImage swapchain_image,
-                    VkImageView* image_view,
-                    bool is_depth)
+vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
+                    VkImageView* image_view, bool is_depth)
 {
     const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -602,8 +609,7 @@ vut_init_pipeline(VkPipelineLayout pipeline_layout)
 {}
 
 VuResult
-vut_init_pipeline_layout(VkDevice device,
-                         VkDescriptorSetLayout* descriptor_layout,
+vut_init_pipeline_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout,
                          VkPipelineLayout* pipeline_layout)
 {
     const VkPipelineLayoutCreateInfo create_info = {
@@ -626,21 +632,21 @@ vut_init_descriptor_layout(VkDevice device, VkDescriptorSetLayout* descriptor_la
 {
     const VkDescriptorSetLayoutBinding layout_bindings[2] = {
         [0] =
-          {
-            .binding = 0,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .pImmutableSamplers = NULL,
-          },
+            {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = NULL,
+            },
         [1] =
-          {
-            .binding = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = DEMO_TEXTURE_COUNT,
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .pImmutableSamplers = NULL,
-          },
+            {
+                .binding = 1,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = DEMO_TEXTURE_COUNT,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = NULL,
+            },
     };
     const VkDescriptorSetLayoutCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -662,15 +668,15 @@ vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool
 {
     const VkDescriptorPoolSize type_counts[2] = {
         [0] =
-          {
-            .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = image_count,
-          },
+            {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = image_count,
+            },
         [1] =
-          {
-            .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = image_count * DEMO_TEXTURE_COUNT,
-          },
+            {
+                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = image_count * DEMO_TEXTURE_COUNT,
+            },
     };
     const VkDescriptorPoolCreateInfo create_info = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -689,12 +695,8 @@ vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool
 }
 
 VuResult
-vut_init_descriptor_set(VkDevice device,
-                        VkSampler sampler,
-                        VkImageView view,
-                        VkDescriptorPool pool,
-                        VkDescriptorSetLayout* layout,
-                        VkDescriptorSet* set)
+vut_init_descriptor_set(VkDevice device, VkSampler sampler, VkImageView view, VkDescriptorPool pool,
+                        VkDescriptorSetLayout* layout, VkDescriptorSet* set)
 {
     VkDescriptorImageInfo tex_descs[DEMO_TEXTURE_COUNT];
     VkWriteDescriptorSet writes[2];
@@ -741,36 +743,34 @@ vut_init_descriptor_set(VkDevice device,
 }
 
 VuResult
-vut_init_render_pass(VkDevice device,
-                     VkFormat color_format,
-                     VkFormat depth_format,
+vut_init_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format,
                      VkRenderPass* render_pass)
 {
     const VkAttachmentDescription attachments[2] = {
         [0] =
-          {
-            .format = color_format,
-            .flags = 0,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-          },
+            {
+                .format = color_format,
+                .flags = 0,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            },
         [1] =
-          {
-            .format = depth_format,
-            .flags = 0,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-            .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-          },
+            {
+                .format = depth_format,
+                .flags = 0,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            },
     };
     const VkAttachmentReference color_reference = {
         .attachment = 0,
@@ -813,12 +813,8 @@ vut_init_render_pass(VkDevice device,
 }
 
 VuResult
-vut_init_framebuffer(VkDevice device,
-                     VkRenderPass render_pass,
-                     VkImageView depth_view,
-                     VkImageView image_view,
-                     uint32_t width,
-                     uint32_t height,
+vut_init_framebuffer(VkDevice device, VkRenderPass render_pass, VkImageView depth_view,
+                     VkImageView image_view, uint32_t width, uint32_t height,
                      VkFramebuffer* framebuffer)
 {
     VkImageView attachments[2];
@@ -862,10 +858,8 @@ vut_init_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete
 }
 
 VuResult
-vut_build_image_ownership_cmd(VkCommandBuffer present_buffer,
-                              uint32_t graphics_queue_family_index,
-                              uint32_t present_queue_family_index,
-                              VkImage swapchain_image)
+vut_build_image_ownership_cmd(VkCommandBuffer present_buffer, uint32_t graphics_queue_family_index,
+                              uint32_t present_queue_family_index, VkImage swapchain_image)
 {
     VkResult result;
 
@@ -893,15 +887,8 @@ vut_build_image_ownership_cmd(VkCommandBuffer present_buffer,
         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
     };
 
-    vkCmdPipelineBarrier(present_buffer,
-                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                         0,
-                         0,
-                         NULL,
-                         0,
-                         NULL,
-                         1,
+    vkCmdPipelineBarrier(present_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1,
                          &image_ownership_barrier);
     result = vkEndCommandBuffer(present_buffer);
     if (result) {

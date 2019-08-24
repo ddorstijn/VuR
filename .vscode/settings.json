@@ -8,5 +8,6 @@
         "*.tcc": "c",
         "vk_util.h": "c",
         "glfw3.h": "c"
-    }
+    },
+    "cmake.configureOnOpen": true
 }
