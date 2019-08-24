@@ -27,12 +27,9 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
     vut_pick_physical_device(gpus, gpu_count, &ctx->gpu);
 
     // Get a queue which supports graphics and create a logical device
-    vut_get_queue_family_indices(ctx->gpu,
-                                 ctx->surface,
-                                 &ctx->queue_family_count,
+    vut_get_queue_family_indices(ctx->gpu, ctx->surface, &ctx->queue_family_count,
                                  &ctx->graphics_queue_family_index,
-                                 &ctx->present_queue_family_index,
-                                 &ctx->separate_present_queue);
+                                 &ctx->present_queue_family_index, &ctx->separate_present_queue);
 
     vut_init_device(ctx->gpu, ctx->graphics_queue_family_index, &ctx->device);
 
@@ -62,38 +59,49 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
 }
 
 void
-vur_prepare(VulkanContext* ctx)
+vur_prepare_swapchain(VulkanContext* ctx)
 {
-    if (ctx->command_pool == VK_NULL_HANDLE) {
-        vut_init_command_pool(ctx->device, ctx->graphics_queue_family_index, &ctx->command_pool);
+    VkResult result;
+
+    vut_init_swapchain(ctx->gpu, ctx->device, ctx->surface, ctx->window, &ctx->swapchain,
+                       ctx->format, ctx->color_space);
+
+    result =
+        vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count, NULL);
+    if (result) {
+        // Error
     }
 
-    vut_alloc_command_buffer(ctx->device, ctx->command_pool, &ctx->command_buffer);
-    vut_begin_command_buffer(ctx->command_buffer);
+    VkImage swapchain_images[ctx->swapchain_image_count];
+    result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count,
+                                     swapchain_images);
+    if (result) {
+        // Error
+    }
 
-    vur_prepare_buffers(ctx);
-
-    vur_prepare_depth(ctx);
-    vur_prepare_textures(ctx);
-    vur_prepare_meshes(ctx);
-
-    vut_init_descriptor_layout(ctx->device, &ctx->descriptor_layout);
-    vut_init_pipeline_layout(ctx->device, &ctx->descriptor_layout, &ctx->pipeline_layout);
-    vut_init_render_pass(ctx->device, ctx->format, ctx->depth.format, &ctx->render_pass);
-    vur_prepare_pipeline(ctx);
+    ctx->swapchain_image_resources = (SwapchainImageResources*)malloc(
+        sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
 
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vut_alloc_command_buffer(
-          ctx->device, ctx->command_pool, &ctx->swapchain_image_resources[i].cmd);
+        ctx->swapchain_image_resources[i].image = swapchain_images[i];
+        vut_init_image_view(ctx->device, ctx->format, ctx->swapchain_image_resources[i].image,
+                            &ctx->swapchain_image_resources[i].view, false);
     }
+}
+
+void
+vur_prepare_buffers(VulkanContext* ctx)
+{
+    vut_init_command_pool(ctx->device, ctx->present_queue_family_index, &ctx->command_pool);
+
+    vut_alloc_command_buffer(ctx->device, ctx->command_pool, 1, &ctx->command_buffer);
 
     if (ctx->separate_present_queue) {
-        vut_init_command_pool(
-          ctx->device, ctx->present_queue_family_index, &ctx->present_command_pool);
+        vut_init_command_pool(ctx->device, ctx->present_queue_family_index,
+                              &ctx->present_command_pool);
 
         for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-            vut_alloc_command_buffer(ctx->device,
-                                     ctx->present_command_pool,
+            vut_alloc_command_buffer(ctx->device, ctx->present_command_pool,
                                      &ctx->swapchain_image_resources[i].graphics_to_present_cmd);
 
             vut_build_image_ownership_cmd(ctx->swapchain_image_resources[i].graphics_to_present_cmd,
@@ -101,50 +109,6 @@ vur_prepare(VulkanContext* ctx)
                                           ctx->present_queue_family_index,
                                           ctx->swapchain_image_resources[i].image);
         }
-    }
-
-    vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
-    vut_init_descriptor_set();
-
-    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vut_init_framebuffer(ctx->device,
-                             ctx->render_pass,
-                             ctx->depth.view,
-                             ctx->swapchain_image_resources[i].view,
-                             ctx->width,
-                             ctx->height,
-                             &ctx->swapchain_image_resources[i].framebuffer);
-    }
-}
-
-void
-vur_prepare_buffers(VulkanContext* ctx)
-{
-    VkResult result;
-
-    result =
-      vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count, NULL);
-    if (result) {
-        // Error
-    }
-
-    VkImage swapchain_images[ctx->swapchain_image_count];
-    result = vkGetSwapchainImagesKHR(
-      ctx->device, ctx->swapchain, &ctx->swapchain_image_count, swapchain_images);
-    if (result) {
-        // Error
-    }
-
-    ctx->swapchain_image_resources = (SwapchainImageResources*)malloc(
-      sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
-
-    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        ctx->swapchain_image_resources[i].image = swapchain_images[i];
-        vut_init_image_view(ctx->device,
-                            ctx->format,
-                            ctx->swapchain_image_resources[i].image,
-                            &ctx->swapchain_image_resources[i].view,
-                            false);
     }
 }
 
@@ -179,116 +143,113 @@ vur_prepare_depth(VulkanContext* ctx)
 void
 vur_prepare_textures(VulkanContext* ctx)
 {
-    // const VkFormat tex_format = VK_FORMAT_R8G8B8A8_UNORM;
-    // VkFormatProperties props;
-    // uint32_t i;
+    const VkFormat tex_format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkFormatProperties props;
+    uint32_t i;
 
-    // vkGetPhysicalDeviceFormatProperties(ctx->gpu, tex_format, &props);
+    vkGetPhysicalDeviceFormatProperties(ctx->gpu, tex_format, &props);
 
-    // for (i = 0; i < DEMO_TEXTURE_COUNT; i++) {
-    //     VkResult result;
+    for (i = 0; i < DEMO_TEXTURE_COUNT; i++) {
+        VkResult result;
 
-    //     if ((props.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) &&
-    //     !demo->use_staging_buffer) {
-    //         /* Device can texture using linear textures */
-    //         demo_prepare_texture_image(
-    //             demo, tex_files[i], &demo->textures[i], VK_IMAGE_TILING_LINEAR,
-    //             VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-    //             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    //         // Nothing in the pipeline needs to be complete to start, and don't allow fragment
-    //         // shader to run until layout transition completes
-    //         demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-    //                               VK_IMAGE_LAYOUT_PREINITIALIZED, demo->textures[i].imageLayout,
-    //                               0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-    //                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    //         demo->staging_texture.image = 0;
-    //     } else if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) {
-    //         /* Must use staging buffer to copy linear texture to optimized */
+        if ((props.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) &&
+            !demo->use_staging_buffer) {
+            /* Device can texture using linear textures */
+            demo_prepare_texture_image(demo, tex_files[i], &demo->textures[i],
+                                       VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_SAMPLED_BIT,
+                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+            // Nothing in the pipeline needs to be complete to start, and don't
+            // allow fragment shader to run until layout transition completes
+            demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
+                                  VK_IMAGE_LAYOUT_PREINITIALIZED, demo->textures[i].imageLayout, 0,
+                                  VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            demo->staging_texture.image = 0;
+        } else if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) {
+            /* Must use staging buffer to copy linear texture to optimized */
 
-    //         memset(&demo->staging_texture, 0, sizeof(demo->staging_texture));
-    //         demo_prepare_texture_buffer(demo, tex_files[i], &demo->staging_texture);
+            memset(&demo->staging_texture, 0, sizeof(demo->staging_texture));
+            demo_prepare_texture_buffer(demo, tex_files[i], &demo->staging_texture);
 
-    //         demo_prepare_texture_image(demo, tex_files[i], &demo->textures[i],
-    //         VK_IMAGE_TILING_OPTIMAL,
-    //                                    (VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-    //                                    VK_IMAGE_USAGE_SAMPLED_BIT),
-    //                                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+            demo_prepare_texture_image(
+                demo, tex_files[i], &demo->textures[i], VK_IMAGE_TILING_OPTIMAL,
+                (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    //         demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-    //                               VK_IMAGE_LAYOUT_PREINITIALIZED,
-    //                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-    //                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-    //                               VK_PIPELINE_STAGE_TRANSFER_BIT);
+            demo_set_image_layout(
+                demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
+                VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
+                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    //         VkBufferImageCopy copy_region = {
-    //             .bufferOffset = 0,
-    //             .bufferRowLength = demo->staging_texture.tex_width,
-    //             .bufferImageHeight = demo->staging_texture.tex_height,
-    //             .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
-    //             .imageOffset = { 0, 0, 0 },
-    //             .imageExtent = { demo->staging_texture.tex_width,
-    //             demo->staging_texture.tex_height, 1 },
-    //         };
+            VkBufferImageCopy copy_region = {
+                .bufferOffset = 0,
+                .bufferRowLength = demo->staging_texture.tex_width,
+                .bufferImageHeight = demo->staging_texture.tex_height,
+                .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
+                .imageOffset = { 0, 0, 0 },
+                .imageExtent = { demo->staging_texture.tex_width, demo->staging_texture.tex_height,
+                                 1 },
+            };
 
-    //         vkCmdCopyBufferToImage(demo->cmd, demo->staging_texture.buffer,
-    //         demo->textures[i].image,
-    //                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+            vkCmdCopyBufferToImage(demo->cmd, demo->staging_texture.buffer, demo->textures[i].image,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
 
-    //         demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-    //                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    //                               demo->textures[i].imageLayout, VK_ACCESS_TRANSFER_WRITE_BIT,
-    //                               VK_PIPELINE_STAGE_TRANSFER_BIT,
-    //                               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
+                                  VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                  demo->textures[i].imageLayout, VK_ACCESS_TRANSFER_WRITE_BIT,
+                                  VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-    //     } else {
-    //         // Error
-    //     }
+        } else {
+            // Error
+        }
 
-    //     const VkSamplerCreateInfo sampler = {
-    //         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-    //         .pNext = NULL,
-    //         .magFilter = VK_FILTER_NEAREST,
-    //         .minFilter = VK_FILTER_NEAREST,
-    //         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-    //         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    //         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    //         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-    //         .mipLodBias = 0.0f,
-    //         .anisotropyEnable = VK_FALSE,
-    //         .maxAnisotropy = 1,
-    //         .compareOp = VK_COMPARE_OP_NEVER,
-    //         .minLod = 0.0f,
-    //         .maxLod = 0.0f,
-    //         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-    //         .unnormalizedCoordinates = VK_FALSE,
-    //     };
+        const VkSamplerCreateInfo sampler = {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .pNext = NULL,
+            .magFilter = VK_FILTER_NEAREST,
+            .minFilter = VK_FILTER_NEAREST,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .mipLodBias = 0.0f,
+            .anisotropyEnable = VK_FALSE,
+            .maxAnisotropy = 1,
+            .compareOp = VK_COMPARE_OP_NEVER,
+            .minLod = 0.0f,
+            .maxLod = 0.0f,
+            .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+            .unnormalizedCoordinates = VK_FALSE,
+        };
 
-    //     VkImageViewCreateInfo view = {
-    //         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-    //         .pNext = NULL,
-    //         .image = VK_NULL_HANDLE,
-    //         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-    //         .format = tex_format,
-    //         .components =
-    //             {
-    //                 VK_COMPONENT_SWIZZLE_R,
-    //                 VK_COMPONENT_SWIZZLE_G,
-    //                 VK_COMPONENT_SWIZZLE_B,
-    //                 VK_COMPONENT_SWIZZLE_A,
-    //             },
-    //         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-    //         .flags = 0,
-    //     };
+        VkImageViewCreateInfo view = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .pNext = NULL,
+            .image = VK_NULL_HANDLE,
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = tex_format,
+            .components =
+                {
+                    VK_COMPONENT_SWIZZLE_R,
+                    VK_COMPONENT_SWIZZLE_G,
+                    VK_COMPONENT_SWIZZLE_B,
+                    VK_COMPONENT_SWIZZLE_A,
+                },
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+            .flags = 0,
+        };
 
-    //     /* create sampler */
-    //     err = vkCreateSampler(demo->device, &sampler, NULL, &demo->textures[i].sampler);
-    //     assert(!err);
+        /* create sampler */
+        err = vkCreateSampler(demo->device, &sampler, NULL, &demo->textures[i].sampler);
+        assert(!err);
 
-    //     /* create image view */
-    //     view.image = demo->textures[i].image;
-    //     err = vkCreateImageView(demo->device, &view, NULL, &demo->textures[i].view);
-    //     assert(!err);
-    // }
+        /* create image view */
+        view.image = demo->textures[i].image;
+        err = vkCreateImageView(demo->device, &view, NULL, &demo->textures[i].view);
+        assert(!err);
+    }
 }
 
 void
@@ -409,14 +370,45 @@ vur_prepare_pipeline(VulkanContext* ctx)
 
     pipeline.renderPass = ctx->render_pass;
 
-    result = vkCreateGraphicsPipelines(
-      ctx->device, ctx->pipeline_cache, 1, &pipeline, NULL, &ctx->pipeline);
+    result = vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pipeline, NULL,
+                                       &ctx->pipeline);
     if (result) {
         // Error
     }
 
     vkDestroyShaderModule(ctx->device, ctx->frag_shader_module, NULL);
     vkDestroyShaderModule(ctx->device, ctx->vert_shader_module, NULL);
+}
+
+void
+vur_prepare(VulkanContext* ctx)
+{
+
+    vut_begin_command_buffer(ctx->command_buffer);
+
+    vur_prepare_swapchain(ctx);
+
+    // Prepare the buffers that contain GPU data
+    vur_prepare_buffers(ctx);
+
+    // Prepare GPU data
+    vur_prepare_depth(ctx);
+    vur_prepare_textures(ctx);
+    vur_prepare_meshes(ctx);
+
+    vut_init_descriptor_layout(ctx->device, &ctx->descriptor_layout);
+    vut_init_pipeline_layout(ctx->device, &ctx->descriptor_layout, &ctx->pipeline_layout);
+    vut_init_render_pass(ctx->device, ctx->format, ctx->depth.format, &ctx->render_pass);
+    vur_prepare_pipeline(ctx);
+
+    vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
+    vut_init_descriptor_set();
+
+    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vut_init_framebuffer(ctx->device, ctx->render_pass, ctx->depth.view,
+                             ctx->swapchain_image_resources[i].view, ctx->width, ctx->height,
+                             &ctx->swapchain_image_resources[i].framebuffer);
+    }
 }
 
 // Main render loop
