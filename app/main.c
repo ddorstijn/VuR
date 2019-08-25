@@ -7,6 +7,7 @@ main(int argc, char** argv)
 
     // Initialise the renderer
     vur_init_vulkan(&ctx, "VuR");
+    vur_prepare_swapchain(&ctx);
 
     // Main render loop
     vur_draw(&ctx);
