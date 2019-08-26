@@ -7,7 +7,9 @@
         "vk_sdk_platform.h": "c",
         "*.tcc": "c",
         "vk_util.h": "c",
-        "glfw3.h": "c"
+        "glfw3.h": "c",
+        "initializer_list": "c",
+        "type_traits": "c"
     },
     "cmake.configureOnOpen": true
 }

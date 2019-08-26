@@ -104,9 +104,6 @@ typedef struct
 
     bool pause;
 
-    VkShaderModule vert_shader_module;
-    VkShaderModule frag_shader_module;
-
     VkDescriptorPool descriptor_pool;
 
     uint32_t current_buffer;

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #define DEBUG 1
 
@@ -182,9 +183,12 @@ vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalD
 }
 
 VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
-                             uint32_t* queue_family_count, uint32_t* graphics_queue_family_index,
-                             uint32_t* present_queue_family_index, bool* separate_present_queue)
+vut_get_queue_family_indices(VkPhysicalDevice gpu,
+                             VkSurfaceKHR surface,
+                             uint32_t* queue_family_count,
+                             uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index,
+                             bool* separate_present_queue)
 {
     // Retrieve count by passing NULL
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, NULL);
@@ -315,7 +319,8 @@ vut_init_fence(VkDevice device, VkFence* fence)
 /// Swapchain
 
 VkPresentModeKHR
-vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities, VkPhysicalDevice gpu,
+vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities,
+                     VkPhysicalDevice gpu,
                      VkSurfaceKHR surface)
 {
     uint32_t count;
@@ -378,7 +383,9 @@ vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t width, 
 }
 
 VuResult
-vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format,
+vut_get_surface_format(VkPhysicalDevice gpu,
+                       VkSurfaceKHR surface,
+                       VkFormat* format,
                        VkColorSpaceKHR* color_space)
 {
     // Get the list of VkFormat's that are supported:
@@ -408,9 +415,14 @@ vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* for
 }
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
-                   VkSurfaceCapabilitiesKHR capabilities, VkExtent2D extent, VkFormat format,
-                   VkPresentModeKHR present_mode, VkColorSpaceKHR color_space,
+vut_init_swapchain(VkPhysicalDevice gpu,
+                   VkDevice device,
+                   VkSurfaceKHR surface,
+                   VkSurfaceCapabilitiesKHR capabilities,
+                   VkExtent2D extent,
+                   VkFormat format,
+                   VkPresentModeKHR present_mode,
+                   VkColorSpaceKHR color_space,
                    VkSwapchainKHR* swapchain)
 {
     VkSwapchainKHR old_swapchain = *swapchain;
@@ -489,8 +501,11 @@ vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
 }
 
 VuResult
-vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
-                    VkImageView* image_view, bool is_depth)
+vut_init_image_view(VkDevice device,
+                    VkFormat format,
+                    VkImage swapchain_image,
+                    VkImageView* image_view,
+                    bool is_depth)
 {
     const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -524,6 +539,151 @@ vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
     }
 
     return VUR_SUCCESS;
+}
+
+// Pipeline
+VuResult
+read_shader_file(const char* name, size_t* size, uint32_t code[])
+{
+    if (code == NULL) {
+        struct stat sb;
+        if (stat(name, &sb) != -1) {
+            *size = sb.st_size;
+        }
+
+        return VUR_SUCCESS;
+    }
+
+    FILE* shader;
+    shader = fopen(name, "rb");
+    if (shader == NULL) {
+        printf("  err %d \n", errno);
+    }
+
+    size_t bytes_written = fread(code, sizeof(char), *size, shader);
+    if (bytes_written != *size) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_shader_module(VkDevice device, char* shader_name, VkShaderModule* shader_module)
+{
+    size_t size;
+    read_shader_file(shader_name, &size, NULL);
+    uint32_t bytes[size];
+    read_shader_file(shader_name, &size, bytes);
+
+    VkShaderModuleCreateInfo createInfo = {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = size,
+        .pCode = bytes,
+    };
+
+    if (vkCreateShaderModule(device, &createInfo, NULL, shader_module) != VK_SUCCESS) {
+        // Error
+    }
+}
+
+VuResult
+vut_init_pipeline_layout(VkDevice device,
+                         VkDescriptorSetLayout* descriptor_layout,
+                         VkPipelineLayout* pipeline_layout)
+{
+    const VkPipelineLayoutCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = NULL,
+        .setLayoutCount = 0,
+        .pSetLayouts = descriptor_layout,
+    };
+
+    VkResult result = vkCreatePipelineLayout(device, &create_info, NULL, pipeline_layout);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* render_pass)
+{
+    VkAttachmentDescription color_attachment = {
+        .format = color_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    };
+
+    VkAttachmentReference color_attachment_ref = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &color_attachment_ref,
+    };
+
+    VkRenderPassCreateInfo render_pass_info = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &color_attachment,
+        .subpassCount = 1,
+        .pSubpasses = &subpass,
+    };
+
+    VkResult result = vkCreateRenderPass(device, &render_pass_info, NULL, render_pass);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_init_pipeline(VkDevice device,
+                  const VkPipelineShaderStageCreateInfo stages[],
+                  const VkPipelineVertexInputStateCreateInfo* vertex_input,
+                  const VkPipelineInputAssemblyStateCreateInfo* input_assembly,
+                  const VkPipelineViewportStateCreateInfo* viewport_state,
+                  const VkPipelineRasterizationStateCreateInfo* rasterizer,
+                  const VkPipelineMultisampleStateCreateInfo* multisampling,
+                  const VkPipelineColorBlendStateCreateInfo* color_blending,
+                  VkPipelineLayout pipeline_layout,
+                  VkRenderPass render_pass,
+                  VkPipeline* pipeline)
+{
+    VkGraphicsPipelineCreateInfo pipelineInfo = {
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = 2,
+        .pStages = stages,
+        .pVertexInputState = vertex_input,
+        .pInputAssemblyState = input_assembly,
+        .pViewportState = viewport_state,
+        .pRasterizationState = rasterizer,
+        .pMultisampleState = multisampling,
+        .pDepthStencilState = NULL,
+        .pColorBlendState = color_blending,
+        .pDynamicState = NULL,
+        .layout = pipeline_layout,
+        .renderPass = render_pass,
+        .subpass = 0,
+        .basePipelineHandle = VK_NULL_HANDLE,
+        .basePipelineIndex = -1,
+    };
+
+    if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, pipeline) !=
+        VK_SUCCESS) {
+        // Error
+    }
 }
 
 // VuResult
@@ -601,29 +761,6 @@ vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
 //     };
 
 //     VkResult result = vkCreateImage(device, &image_info, NULL, image);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
-// }
-
-// VuResult
-// vut_init_pipeline(VkPipelineLayout pipeline_layout)
-// {}
-
-// VuResult
-// vut_init_pipeline_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout,
-//                          VkPipelineLayout* pipeline_layout)
-// {
-//     const VkPipelineLayoutCreateInfo create_info = {
-//         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-//         .pNext = NULL,
-//         .setLayoutCount = 1,
-//         .pSetLayouts = descriptor_layout,
-//     };
-
-//     VkResult result = vkCreatePipelineLayout(device, &create_info, NULL, pipeline_layout);
 //     if (result) {
 //         // Error
 //     }
@@ -746,76 +883,6 @@ vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
 //         writes[1].dstSet = swapchain_image_resources[i].descriptor_set;
 //         vkUpdateDescriptorSets(device, 2, writes, 0, NULL);
 //     }
-// }
-
-// VuResult
-// vut_init_render_pass(VkDevice device, VkFormat color_format, VkFormat depth_format,
-//                      VkRenderPass* render_pass)
-// {
-//     const VkAttachmentDescription attachments[2] = {
-//         [0] =
-//             {
-//                 .format = color_format,
-//                 .flags = 0,
-//                 .samples = VK_SAMPLE_COUNT_1_BIT,
-//                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-//                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-//                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-//                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-//                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-//                 .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-//             },
-//         [1] =
-//             {
-//                 .format = depth_format,
-//                 .flags = 0,
-//                 .samples = VK_SAMPLE_COUNT_1_BIT,
-//                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-//                 .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-//                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-//                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-//                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-//                 .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-//             },
-//     };
-//     const VkAttachmentReference color_reference = {
-//         .attachment = 0,
-//         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-//     };
-//     const VkAttachmentReference depth_reference = {
-//         .attachment = 1,
-//         .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-//     };
-//     const VkSubpassDescription subpass = {
-//         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-//         .flags = 0,
-//         .inputAttachmentCount = 0,
-//         .pInputAttachments = NULL,
-//         .colorAttachmentCount = 1,
-//         .pColorAttachments = &color_reference,
-//         .pResolveAttachments = NULL,
-//         .pDepthStencilAttachment = &depth_reference,
-//         .preserveAttachmentCount = 0,
-//         .pPreserveAttachments = NULL,
-//     };
-//     const VkRenderPassCreateInfo create_info = {
-//         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-//         .pNext = NULL,
-//         .flags = 0,
-//         .attachmentCount = 2,
-//         .pAttachments = attachments,
-//         .subpassCount = 1,
-//         .pSubpasses = &subpass,
-//         .dependencyCount = 0,
-//         .pDependencies = NULL,
-//     };
-
-//     VkResult result = vkCreateRenderPass(device, &create_info, NULL, render_pass);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
 // }
 
 // VuResult
