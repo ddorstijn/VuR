@@ -19,10 +19,17 @@ typedef enum VuResult
 } VuResult;
 
 VuResult
-vut_init_window(const char* app_name, GLFWwindow** window);
+vut_init_window(const char app_name[], GLFWwindow** window);
 
 VuResult
-vut_init_instance(const char* app_name, VkInstance* instance);
+vut_init_instance(const char app_name[], VkInstance* instance);
+
+VuResult
+vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
+                         VkPhysicalDevice physical_devices[]);
+
+VuResult
+vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalDevice gpu[]);
 
 VuResult
 vut_init_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device);
@@ -32,16 +39,22 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
                              uint32_t* queue_family_count, uint32_t* graphics_queue_family_index,
                              uint32_t* present_queue_family_index, bool* separate_present_queue);
 
-VuResult
-vut_get_physical_devices(VkInstance instance, uint32_t* physical_device_count,
-                         VkPhysicalDevice** physical_devices);
+VkPresentModeKHR
+vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities, VkPhysicalDevice gpu,
+                     VkSurfaceKHR surface);
+
+VkExtent2D
+vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t width, uint32_t height);
 
 VuResult
-vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalDevice* gpu);
+vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format,
+                       VkColorSpaceKHR* color_space);
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface, GLFWwindow* window,
-                   VkSwapchainKHR* swapchain, VkFormat* format, VkColorSpaceKHR* color_space);
+vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
+                   VkSurfaceCapabilitiesKHR capabilities, VkExtent2D extent, VkFormat format,
+                   VkPresentModeKHR present_mode, VkColorSpaceKHR color_space,
+                   VkSwapchainKHR* swapchain);
 
 VuResult
 vut_init_image(VkDevice device, VkFormat format, uint32_t width, uint32_t height, VkImage* image);

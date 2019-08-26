@@ -113,12 +113,18 @@ typedef struct
     uint32_t queue_family_count;
 } VulkanContext;
 
+// Init
 void
 vur_init_vulkan(VulkanContext* ctx, const char* app_name);
 
 void
+vur_prepare_swapchain(VulkanContext* ctx);
+
+// Main loop
+void
 vur_draw(VulkanContext* ctx);
 
+// Destroy
 void
 vur_destroy(VulkanContext* ctx);
 
