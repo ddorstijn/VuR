@@ -7,10 +7,14 @@ main(int argc, char** argv)
 
     // Initialise the renderer
     vur_init_vulkan(&ctx, "VuR");
-    vur_prepare_swapchain(&ctx);
+    vur_prepare(&ctx);
+    // Make a command list of all the draws that need to be done
+    vur_record_buffers(&ctx);
 
     // Main render loop
-    vur_draw(&ctx);
+    while (!ctx.should_quit) {
+        vur_draw(&ctx);
+    }
 
     // Clean up the renderer
     vur_destroy(&ctx);

@@ -3,6 +3,13 @@
 #include "vk_util.h"
 #include <stdlib.h>
 
+static void
+vur_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
+{
+    VulkanContext* ctx = (VulkanContext*)glfwGetWindowUserPointer(window);
+    ctx->framebuffer_resized = true;
+}
+
 void
 vur_init_vulkan(VulkanContext* ctx, const char* app_name)
 {
@@ -14,11 +21,19 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
     ctx->pause = false;
 
     vut_init_window(ctx->name, &ctx->window);
+    glfwSetWindowUserPointer(ctx->window, ctx);
+    glfwSetFramebufferSizeCallback(ctx->window, vur_framebuffer_resize_callback);
+
+    // Initialize the Vulkan instance
     vut_init_instance(ctx->name, &ctx->instance);
 
     // Let GLFW handle cross-platform surface creation
     glfwCreateWindowSurface(ctx->instance, ctx->window, NULL, &ctx->surface);
-    glfwGetFramebufferSize(ctx->window, &ctx->width, &ctx->height);
+
+    int width, height;
+    glfwGetFramebufferSize(ctx->window, &width, &height);
+    ctx->window_extent.width = width;
+    ctx->window_extent.height = height;
 
     // Select the most suitable gpu
     uint32_t gpu_count;
@@ -28,12 +43,9 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
     vut_pick_physical_device(gpus, gpu_count, &ctx->gpu);
 
     // Get a queue which supports graphics and create a logical device
-    vut_get_queue_family_indices(ctx->gpu,
-                                 ctx->surface,
-                                 &ctx->queue_family_count,
+    vut_get_queue_family_indices(ctx->gpu, ctx->surface, &ctx->queue_family_count,
                                  &ctx->graphics_queue_family_index,
-                                 &ctx->present_queue_family_index,
-                                 &ctx->separate_present_queue);
+                                 &ctx->present_queue_family_index, &ctx->separate_present_queue);
 
     vut_init_device(ctx->gpu, ctx->graphics_queue_family_index, &ctx->device);
 
@@ -47,10 +59,9 @@ vur_init_vulkan(VulkanContext* ctx, const char* app_name)
     }
 
     // Create semaphores to synchronize acquiring presentable buffers before
-    // rendering and waiting for drawing to be complete before presenting
-
+    // rendering and waiting for drawing to be complete before presenting.
     // Create fences that we can use to throttle if we get too far
-    // ahead of the image presents
+    // ahead of the image presents.
     for (uint32_t i = 0; i < FRAME_LAG; i++) {
         vut_init_fence(ctx->device, &ctx->fences[i]);
         vut_init_semaphore(ctx->device, &ctx->image_acquired_semaphores[i]);
@@ -74,42 +85,32 @@ vur_prepare_swapchain(VulkanContext* ctx)
     }
 
     VkPresentModeKHR present_mode = vut_get_present_mode(capabilities, ctx->gpu, ctx->surface);
-    VkExtent2D extent = vut_get_swapchain_extent(capabilities, ctx->width, ctx->height);
+    VkExtent2D extent = vut_get_swapchain_extent(capabilities, ctx->window_extent);
     vut_get_surface_format(ctx->gpu, ctx->surface, &ctx->format, &ctx->color_space);
 
-    vut_init_swapchain(ctx->gpu,
-                       ctx->device,
-                       ctx->surface,
-                       capabilities,
-                       extent,
-                       ctx->format,
-                       present_mode,
-                       ctx->color_space,
-                       &ctx->swapchain);
+    vut_init_swapchain(ctx->gpu, ctx->device, ctx->surface, capabilities, extent, ctx->format,
+                       present_mode, ctx->color_space, &ctx->swapchain);
 
     result =
-      vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count, NULL);
+        vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count, NULL);
     if (result) {
         // Error
     }
 
     VkImage swapchain_images[ctx->swapchain_image_count];
-    result = vkGetSwapchainImagesKHR(
-      ctx->device, ctx->swapchain, &ctx->swapchain_image_count, swapchain_images);
+    result = vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count,
+                                     swapchain_images);
     if (result) {
         // Error
     }
 
-    ctx->swapchain_image_resources = (SwapchainImageResources*)malloc(
-      sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
+    ctx->swapchain_image_resources =
+        malloc(sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
 
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
         ctx->swapchain_image_resources[i].image = swapchain_images[i];
-        vut_init_image_view(ctx->device,
-                            ctx->format,
-                            ctx->swapchain_image_resources[i].image,
-                            &ctx->swapchain_image_resources[i].view,
-                            false);
+        vut_init_image_view(ctx->device, ctx->format, ctx->swapchain_image_resources[i].image,
+                            &ctx->swapchain_image_resources[i].view, false);
     }
 }
 
@@ -156,16 +157,16 @@ vur_create_graphics_pipeline(VulkanContext* ctx)
     VkViewport viewport = {
         .x = 0.0f,
         .y = 0.0f,
-        .width = (float)ctx->width,
-        .height = (float)ctx->height,
+        .width = (float)ctx->window_extent.width,
+        .height = (float)ctx->window_extent.height,
         .minDepth = 0.0f,
         .maxDepth = 1.0f,
     };
 
     VkRect2D scissor = {
         .offset = { 0, 0 },
-        .extent.width = ctx->width,
-        .extent.height = ctx->height,
+        .extent.width = ctx->window_extent.width,
+        .extent.height = ctx->window_extent.height,
     };
 
     const VkPipelineViewportStateCreateInfo viewport_state = {
@@ -212,367 +213,213 @@ vur_create_graphics_pipeline(VulkanContext* ctx)
     };
 
     vut_init_pipeline_layout(ctx->device, NULL, &ctx->pipeline_layout);
-    vut_init_pipeline(ctx->device,
-                      shader_stages,
-                      &vertex_input,
-                      &input_assembly,
-                      &viewport_state,
-                      &rasterizer,
-                      &multisampling,
-                      &color_blending,
-                      ctx->pipeline_layout,
-                      ctx->render_pass,
-                      &ctx->pipeline);
+    vut_init_pipeline(ctx->device, shader_stages, &vertex_input, &input_assembly, &viewport_state,
+                      &rasterizer, &multisampling, &color_blending, ctx->pipeline_layout,
+                      ctx->render_pass, &ctx->pipeline);
 
     vkDestroyShaderModule(ctx->device, vert_shader_module, NULL);
     vkDestroyShaderModule(ctx->device, frag_shader_module, NULL);
 }
 
-// void
-// vur_prepare_buffers(VulkanContext* ctx)
-// {
-//     vut_init_command_pool(ctx->device, ctx->present_queue_family_index, &ctx->command_pool);
+void
+vur_prepare_buffers(VulkanContext* ctx)
+{
+    vut_init_command_pool(ctx->device, ctx->graphics_queue_family_index, &ctx->command_pool);
 
-//     vut_alloc_command_buffer(ctx->device, ctx->command_pool, 1, &ctx->command_buffer);
+    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vut_alloc_command_buffer(ctx->device, ctx->command_pool, 1,
+                                 &ctx->swapchain_image_resources[i].command_buffer);
+    }
+}
 
-//     if (ctx->separate_present_queue) {
-//         vut_init_command_pool(ctx->device, ctx->present_queue_family_index,
-//                               &ctx->present_command_pool);
+void
+vur_prepare(VulkanContext* ctx)
+{
+    // // Prepare GPU data
+    // vur_prepare_depth(ctx);
+    // vur_prepare_textures(ctx);
+    // vur_prepare_meshes(ctx);
 
-//         for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-//             vut_alloc_command_buffer(ctx->device, ctx->present_command_pool,
-//                                      &ctx->swapchain_image_resources[i].graphics_to_present_cmd);
+    // vut_init_descriptor_layout(ctx->device, &ctx->descriptor_layout);
+    // vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
+    // vut_init_descriptor_set();
 
-//             vut_build_image_ownership_cmd(ctx->swapchain_image_resources[i].graphics_to_present_cmd,
-//                                           ctx->graphics_queue_family_index,
-//                                           ctx->present_queue_family_index,
-//                                           ctx->swapchain_image_resources[i].image);
-//         }
-//     }
-// }
+    vur_prepare_swapchain(ctx);
+    vut_init_render_pass(ctx->device, ctx->format, &ctx->render_pass);
+    vur_create_graphics_pipeline(ctx);
 
-// void
-// vur_prepare_depth(VulkanContext* ctx)
-// {
-//     const VkFormat depth_format = VK_FORMAT_D16_UNORM;
-//     vut_init_image(ctx->device, depth_format, ctx->width, ctx->height, &ctx->depth.image);
+    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vut_init_framebuffer(ctx->device, ctx->render_pass, ctx->swapchain_image_resources[i].view,
+                             ctx->window_extent, &ctx->swapchain_image_resources[i].framebuffer);
+    }
 
-//     VkMemoryRequirements mem_reqs;
-//     vkGetImageMemoryRequirements(ctx->device, ctx->depth.image, &mem_reqs);
+    // Prepare the buffers that contain GPU data
+    vur_prepare_buffers(ctx);
+}
 
-//     ctx->depth.mem_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-//     ctx->depth.mem_alloc.pNext = NULL;
-//     ctx->depth.mem_alloc.allocationSize = mem_reqs.size;
-//     ctx->depth.mem_alloc.memoryTypeIndex = 0;
+void
+vur_record_buffers(VulkanContext* ctx)
+{
+    for (size_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vut_begin_command_buffer(ctx->swapchain_image_resources[i].command_buffer);
+        vut_begin_render_pass(ctx->swapchain_image_resources[i].command_buffer, ctx->render_pass,
+                              ctx->swapchain_image_resources[i].framebuffer, ctx->window_extent);
 
-//     /* allocate memory */
-//     VkResult result = vkAllocateMemory(ctx->device, &ctx->depth.mem_alloc, NULL,
-//     &ctx->depth.mem);
+        // Bind pipeline to command buffer and specify its type (graphics or compute)
+        vkCmdBindPipeline(ctx->swapchain_image_resources[i].command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, ctx->pipeline);
 
-//     /* bind memory */
-//     result = vkBindImageMemory(ctx->device, ctx->depth.image, ctx->depth.mem, 0);
+        // Record the pipeline in the command buffer
+        vkCmdDraw(ctx->swapchain_image_resources[i].command_buffer, 3, 1, 0, 0);
 
-//     vut_init_image_view(ctx->device, depth_format, ctx->depth.image, &ctx->depth.view, true);
-// }
+        // Finishing up
+        vkCmdEndRenderPass(ctx->swapchain_image_resources[i].command_buffer);
 
-// void
-// vur_prepare_textures(VulkanContext* ctx)
-// {
-//     const VkFormat tex_format = VK_FORMAT_R8G8B8A8_UNORM;
-//     VkFormatProperties props;
-//     uint32_t i;
+        if (vkEndCommandBuffer(ctx->swapchain_image_resources[i].command_buffer) != VK_SUCCESS) {
+            // Error
+        }
+    }
+}
 
-//     vkGetPhysicalDeviceFormatProperties(ctx->gpu, tex_format, &props);
-
-//     for (i = 0; i < DEMO_TEXTURE_COUNT; i++) {
-//         VkResult result;
-
-//         if ((props.linearTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) &&
-//             !demo->use_staging_buffer) {
-//             /* Device can texture using linear textures */
-//             demo_prepare_texture_image(demo, tex_files[i], &demo->textures[i],
-//                                        VK_IMAGE_TILING_LINEAR, VK_IMAGE_USAGE_SAMPLED_BIT,
-//                                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-//                                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-//             // Nothing in the pipeline needs to be complete to start, and don't
-//             // allow fragment shader to run until layout transition completes
-//             demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-//                                   VK_IMAGE_LAYOUT_PREINITIALIZED, demo->textures[i].imageLayout,
-//                                   0, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-//                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-//             demo->staging_texture.image = 0;
-//         } else if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) {
-//             /* Must use staging buffer to copy linear texture to optimized */
-
-//             memset(&demo->staging_texture, 0, sizeof(demo->staging_texture));
-//             demo_prepare_texture_buffer(demo, tex_files[i], &demo->staging_texture);
-
-//             demo_prepare_texture_image(
-//                 demo, tex_files[i], &demo->textures[i], VK_IMAGE_TILING_OPTIMAL,
-//                 (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
-//                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-//             demo_set_image_layout(
-//                 demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-//                 VK_IMAGE_LAYOUT_PREINITIALIZED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-//                 VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-//             VkBufferImageCopy copy_region = {
-//                 .bufferOffset = 0,
-//                 .bufferRowLength = demo->staging_texture.tex_width,
-//                 .bufferImageHeight = demo->staging_texture.tex_height,
-//                 .imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 },
-//                 .imageOffset = { 0, 0, 0 },
-//                 .imageExtent = { demo->staging_texture.tex_width,
-//                 demo->staging_texture.tex_height,
-//                                  1 },
-//             };
-
-//             vkCmdCopyBufferToImage(demo->cmd, demo->staging_texture.buffer,
-//             demo->textures[i].image,
-//                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
-
-//             demo_set_image_layout(demo, demo->textures[i].image, VK_IMAGE_ASPECT_COLOR_BIT,
-//                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-//                                   demo->textures[i].imageLayout, VK_ACCESS_TRANSFER_WRITE_BIT,
-//                                   VK_PIPELINE_STAGE_TRANSFER_BIT,
-//                                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
-//         } else {
-//             // Error
-//         }
-
-//         const VkSamplerCreateInfo sampler = {
-//             .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-//             .pNext = NULL,
-//             .magFilter = VK_FILTER_NEAREST,
-//             .minFilter = VK_FILTER_NEAREST,
-//             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-//             .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-//             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-//             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-//             .mipLodBias = 0.0f,
-//             .anisotropyEnable = VK_FALSE,
-//             .maxAnisotropy = 1,
-//             .compareOp = VK_COMPARE_OP_NEVER,
-//             .minLod = 0.0f,
-//             .maxLod = 0.0f,
-//             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-//             .unnormalizedCoordinates = VK_FALSE,
-//         };
-
-//         VkImageViewCreateInfo view = {
-//             .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-//             .pNext = NULL,
-//             .image = VK_NULL_HANDLE,
-//             .viewType = VK_IMAGE_VIEW_TYPE_2D,
-//             .format = tex_format,
-//             .components =
-//                 {
-//                     VK_COMPONENT_SWIZZLE_R,
-//                     VK_COMPONENT_SWIZZLE_G,
-//                     VK_COMPONENT_SWIZZLE_B,
-//                     VK_COMPONENT_SWIZZLE_A,
-//                 },
-//             .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-//             .flags = 0,
-//         };
-
-//         /* create sampler */
-//         err = vkCreateSampler(demo->device, &sampler, NULL, &demo->textures[i].sampler);
-//         assert(!err);
-
-//         /* create image view */
-//         view.image = demo->textures[i].image;
-//         err = vkCreateImageView(demo->device, &view, NULL, &demo->textures[i].view);
-//         assert(!err);
-//     }
-// }
-
-// void
-// vur_prepare_meshes(VulkanContext* ctx)
-// {}
-
-// void
-// vur_prepare_pipeline(VulkanContext* ctx)
-// {
-//     VkGraphicsPipelineCreateInfo pipeline;
-//     VkPipelineCacheCreateInfo pipelineCache;
-//     VkPipelineVertexInputStateCreateInfo vi;
-//     VkPipelineInputAssemblyStateCreateInfo ia;
-//     VkPipelineRasterizationStateCreateInfo rs;
-//     VkPipelineColorBlendStateCreateInfo cb;
-//     VkPipelineDepthStencilStateCreateInfo ds;
-//     VkPipelineViewportStateCreateInfo vp;
-//     VkPipelineMultisampleStateCreateInfo ms;
-//     VkDynamicState dynamicStateEnables[VK_DYNAMIC_STATE_RANGE_SIZE];
-//     VkPipelineDynamicStateCreateInfo dynamicState;
-//     VkResult result;
-
-//     memset(dynamicStateEnables, 0, sizeof dynamicStateEnables);
-//     memset(&dynamicState, 0, sizeof dynamicState);
-//     dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-//     dynamicState.pDynamicStates = dynamicStateEnables;
-
-//     memset(&pipeline, 0, sizeof(pipeline));
-//     pipeline.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-//     pipeline.layout = ctx->pipeline_layout;
-
-//     memset(&vi, 0, sizeof(vi));
-//     vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-//     memset(&ia, 0, sizeof(ia));
-//     ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-//     ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-
-//     memset(&rs, 0, sizeof(rs));
-//     rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-//     rs.polygonMode = VK_POLYGON_MODE_FILL;
-//     rs.cullMode = VK_CULL_MODE_BACK_BIT;
-//     rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-//     rs.depthClampEnable = VK_FALSE;
-//     rs.rasterizerDiscardEnable = VK_FALSE;
-//     rs.depthBiasEnable = VK_FALSE;
-//     rs.lineWidth = 1.0f;
-
-//     memset(&cb, 0, sizeof(cb));
-//     cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-//     VkPipelineColorBlendAttachmentState att_state[1];
-//     memset(att_state, 0, sizeof(att_state));
-//     att_state[0].colorWriteMask = 0xf;
-//     att_state[0].blendEnable = VK_FALSE;
-//     cb.attachmentCount = 1;
-//     cb.pAttachments = att_state;
-
-//     memset(&vp, 0, sizeof(vp));
-//     vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-//     vp.viewportCount = 1;
-//     dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
-//     vp.scissorCount = 1;
-//     dynamicStateEnables[dynamicState.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
-
-//     memset(&ds, 0, sizeof(ds));
-//     ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-//     ds.depthTestEnable = VK_TRUE;
-//     ds.depthWriteEnable = VK_TRUE;
-//     ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-//     ds.depthBoundsTestEnable = VK_FALSE;
-//     ds.back.failOp = VK_STENCIL_OP_KEEP;
-//     ds.back.passOp = VK_STENCIL_OP_KEEP;
-//     ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
-//     ds.stencilTestEnable = VK_FALSE;
-//     ds.front = ds.back;
-
-//     memset(&ms, 0, sizeof(ms));
-//     ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-//     ms.pSampleMask = NULL;
-//     ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-//     vur_prepare_vs(ctx);
-//     vur_prepare_fs(ctx);
-
-//     // Two stages: vs and fs
-//     VkPipelineShaderStageCreateInfo shaderStage_s[2];
-//     memset(&shaderStages, 0, 2 * sizeof(VkPipelineShaderStageCreateInfo));
-
-//     shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-//     shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-//     shaderStages[0].module = ctx->vert_shader_module;
-//     shaderStages[0].pName = "main";
-
-//     shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-//     shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-//     shaderStages[1].module = ctx->frag_shader_module;
-//     shaderStages[1].pName = "main";
-
-//     memset(&pipelineCache, 0, sizeof(pipelineCache));
-//     pipelineCache.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-
-//     result = vkCreatePipelineCache(ctx->device, &pipelineCache, NULL, &ctx->pipeline_cache);
-//     if (result) {
-//         // Error
-//     }
-
-//     pipeline.pVertexInputState = &vi;
-//     pipeline.pInputAssemblyState = &ia;
-//     pipeline.pRasterizationState = &rs;
-//     pipeline.pColorBlendState = &cb;
-//     pipeline.pMultisampleState = &ms;
-//     pipeline.pViewportState = &vp;
-//     pipeline.pDepthStencilState = &ds;
-//     pipeline.stageCount = ARRAY_SIZE(shaderStages);
-//     pipeline.pStages = shaderStages;
-//     pipeline.renderPass = ctx->render_pass;
-//     pipeline.pDynamicState = &dynamicState;
-
-//     pipeline.renderPass = ctx->render_pass;
-
-//     result = vkCreateGraphicsPipelines(ctx->device, ctx->pipeline_cache, 1, &pipeline, NULL,
-//                                        &ctx->pipeline);
-//     if (result) {
-//         // Error
-//     }
-
-//     vkDestroyShaderModule(ctx->device, ctx->frag_shader_module, NULL);
-//     vkDestroyShaderModule(ctx->device, ctx->vert_shader_module, NULL);
-// }
-
-// void
-// vur_prepare(VulkanContext* ctx)
-// {
-
-//     vut_begin_command_buffer(ctx->command_buffer);
-
-//     vur_prepare_swapchain(ctx);
-
-//     // Prepare the buffers that contain GPU data
-//     vur_prepare_buffers(ctx);
-
-//     // Prepare GPU data
-//     vur_prepare_depth(ctx);
-//     vur_prepare_textures(ctx);
-//     vur_prepare_meshes(ctx);
-
-//     vut_init_descriptor_layout(ctx->device, &ctx->descriptor_layout);
-//     vut_init_pipeline_layout(ctx->device, &ctx->descriptor_layout, &ctx->pipeline_layout);
-//     vut_init_render_pass(ctx->device, ctx->format, ctx->depth.format, &ctx->render_pass);
-//     vur_prepare_pipeline(ctx);
-
-//     vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
-//     vut_init_descriptor_set();
-
-//     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-//         vut_init_framebuffer(ctx->device, ctx->render_pass, ctx->depth.view,
-//                              ctx->swapchain_image_resources[i].view, ctx->width, ctx->height,
-//                              &ctx->swapchain_image_resources[i].framebuffer);
-//     }
-// }
+// Forward Cast
+void
+vur_resize(VulkanContext* ctx);
 
 // Main render loop
 void
 vur_draw(VulkanContext* ctx)
 {
-    while (!glfwWindowShouldClose(ctx->window)) {
-        glfwPollEvents();
+    // TODO: Move GLFW to own file
+    glfwPollEvents();
+    if (glfwWindowShouldClose(ctx->window)) {
+        ctx->should_quit = true;
+        return;
     }
+
+    VkResult result;
+
+    result = vkWaitForFences(ctx->device, 1, &ctx->fences[ctx->frame_index], VK_TRUE, UINT64_MAX);
+
+    uint32_t imageIndex;
+    result = vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
+                                   ctx->image_acquired_semaphores[ctx->frame_index], VK_NULL_HANDLE,
+                                   &imageIndex);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+        ctx->framebuffer_resized) {
+        // Swapchain is out of date (e.g. the window was resized) and
+        // must be recreated:
+        ctx->framebuffer_resized = false;
+        vur_resize(ctx);
+        return;
+    }
+
+    VkSemaphore waitSemaphores[] = { ctx->image_acquired_semaphores[ctx->frame_index] };
+    VkSemaphore signalSemaphores[] = { ctx->draw_complete_semaphores[ctx->frame_index] };
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+
+    const VkSubmitInfo submit_info = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = waitSemaphores,
+        .pWaitDstStageMask = waitStages,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &ctx->swapchain_image_resources[imageIndex].command_buffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = signalSemaphores,
+    };
+
+    result = vkResetFences(ctx->device, 1, &ctx->fences[ctx->frame_index]);
+
+    if (vkQueueSubmit(ctx->graphics_queue, 1, &submit_info, ctx->fences[ctx->frame_index]) !=
+        VK_SUCCESS) {
+        // Error
+    }
+
+    VkPresentInfoKHR presentInfo = {};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphores;
+
+    VkSwapchainKHR swapChains[] = { ctx->swapchain };
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+
+    presentInfo.pImageIndices = &imageIndex;
+
+    vkQueuePresentKHR(ctx->present_queue, &presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+        ctx->framebuffer_resized) {
+        ctx->framebuffer_resized = false;
+        vur_resize(ctx);
+        return;
+    } else if (result != VK_SUCCESS) {
+        // Error
+    }
+
+    ctx->frame_index = (ctx->frame_index + 1) % FRAME_LAG;
 }
 
 void
-vur_destroy(VulkanContext* ctx)
+vur_destroy_pipeline(VulkanContext* ctx)
 {
-    VkResult result;
-    result = vkDeviceWaitIdle(ctx->device);
-
-    // Close any open window
-    glfwTerminate();
+    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vkDestroyFramebuffer(ctx->device, ctx->swapchain_image_resources[i].framebuffer, NULL);
+    }
 
     vkDestroyPipeline(ctx->device, ctx->pipeline, NULL);
     vkDestroyPipelineLayout(ctx->device, ctx->pipeline_layout, NULL);
     vkDestroyRenderPass(ctx->device, ctx->render_pass, NULL);
 
+    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
+        vkDestroyImageView(ctx->device, ctx->swapchain_image_resources[i].view, NULL);
+        vkFreeCommandBuffers(ctx->device, ctx->command_pool, 1,
+                             &ctx->swapchain_image_resources[i].command_buffer);
+        // vkDestroyBuffer(ctx->device, ctx->swapchain_image_resources[i].uniform_buffer, NULL);
+        // vkFreeMemory(ctx->device, ctx->swapchain_image_resources[i].uniform_memory, NULL);
+    }
+    vkDestroyCommandPool(ctx->device, ctx->command_pool, NULL);
+    free(ctx->swapchain_image_resources);
+}
+
+void
+vur_resize(VulkanContext* ctx)
+{
+    int width = 0, height = 0;
+    while (width == 0 || height == 0) {
+        glfwGetFramebufferSize(ctx->window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    vkDeviceWaitIdle(ctx->device);
+
+    vur_destroy_pipeline(ctx);
+
+    printf("Resizing window!\n");
+    // Second, re-perform the vur_prepare() function, which will re-create the
+    // swapchain:
+    vur_prepare(ctx);
+    vur_record_buffers(ctx);
+}
+
+void
+vur_destroy(VulkanContext* ctx)
+{
+    vkDeviceWaitIdle(ctx->device);
+
+    // Close any open window
+    glfwTerminate();
+
+    vur_destroy_pipeline(ctx);
+
     // Wait for fences from present operations
     for (uint32_t i = 0; i < FRAME_LAG; i++) {
-        result = vkWaitForFences(ctx->device, 1, &ctx->fences[i], VK_TRUE, 1000);
+        VkResult result = vkWaitForFences(ctx->device, 1, &ctx->fences[i], VK_TRUE, 1000);
+        if (result == VK_TIMEOUT) {
+            printf("Fences timed out. \n");
+        }
         vkDestroyFence(ctx->device, ctx->fences[i], NULL);
         vkDestroySemaphore(ctx->device, ctx->image_acquired_semaphores[i], NULL);
         vkDestroySemaphore(ctx->device, ctx->draw_complete_semaphores[i], NULL);
@@ -581,9 +428,6 @@ vur_destroy(VulkanContext* ctx)
         }
     }
 
-    for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vkDestroyImageView(ctx->device, ctx->swapchain_image_resources[i].view, NULL);
-    }
     vkDestroySwapchainKHR(ctx->device, ctx->swapchain, NULL);
     vkDestroySurfaceKHR(ctx->instance, ctx->surface, NULL);
     vkDestroyDevice(ctx->device, NULL);

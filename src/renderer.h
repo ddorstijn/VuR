@@ -34,8 +34,7 @@ struct texture_object
 typedef struct
 {
     VkImage image;
-    VkCommandBuffer cmd;
-    VkCommandBuffer graphics_to_present_cmd;
+    VkCommandBuffer command_buffer;
     VkImageView view;
     VkBuffer uniform_buffer;
     VkDeviceMemory uniform_memory;
@@ -47,10 +46,10 @@ typedef struct
 {
     VkSurfaceKHR surface;
     bool prepared;
-    bool use_staging_buffer;
     bool separate_present_queue;
 
     GLFWwindow* window;
+    VkExtent2D window_extent;
     const char* name;
 
     VkInstance instance;
@@ -64,7 +63,6 @@ typedef struct
     VkSemaphore draw_complete_semaphores[FRAME_LAG];
     VkSemaphore image_ownership_semaphores[FRAME_LAG];
 
-    int width, height;
     VkFormat format;
     VkColorSpaceKHR color_space;
 
@@ -103,6 +101,8 @@ typedef struct
     mat4 model;
 
     bool pause;
+    bool should_quit;
+    bool framebuffer_resized;
 
     VkDescriptorPool descriptor_pool;
 
@@ -115,7 +115,10 @@ void
 vur_init_vulkan(VulkanContext* ctx, const char* app_name);
 
 void
-vur_prepare_swapchain(VulkanContext* ctx);
+vur_prepare(VulkanContext* ctx);
+
+void
+vur_record_buffers(VulkanContext* ctx);
 
 // Main loop
 void

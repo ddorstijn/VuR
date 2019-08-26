@@ -183,12 +183,9 @@ vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalD
 }
 
 VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu,
-                             VkSurfaceKHR surface,
-                             uint32_t* queue_family_count,
-                             uint32_t* graphics_queue_family_index,
-                             uint32_t* present_queue_family_index,
-                             bool* separate_present_queue)
+vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
+                             uint32_t* queue_family_count, uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index, bool* separate_present_queue)
 {
     // Retrieve count by passing NULL
     vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, NULL);
@@ -319,8 +316,7 @@ vut_init_fence(VkDevice device, VkFence* fence)
 /// Swapchain
 
 VkPresentModeKHR
-vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities,
-                     VkPhysicalDevice gpu,
+vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities, VkPhysicalDevice gpu,
                      VkSurfaceKHR surface)
 {
     uint32_t count;
@@ -354,15 +350,15 @@ vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities,
 }
 
 VkExtent2D
-vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t width, uint32_t height)
+vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, VkExtent2D window_extent)
 {
     VkExtent2D extent;
     // Width and height are either both 0xFFFFFFFF, or both not 0xFFFFFFFF
     if (capabilities.currentExtent.width == 0xFFFFFFFF) {
         // If the surface size is undefined, the size is set to
         // the size of the images requested
-        extent.width = width;
-        extent.height = height;
+        extent.width = window_extent.width;
+        extent.height = window_extent.height;
 
         if (extent.width < capabilities.minImageExtent.width) {
             extent.width = capabilities.minImageExtent.width;
@@ -383,9 +379,7 @@ vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, uint32_t width, 
 }
 
 VuResult
-vut_get_surface_format(VkPhysicalDevice gpu,
-                       VkSurfaceKHR surface,
-                       VkFormat* format,
+vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format,
                        VkColorSpaceKHR* color_space)
 {
     // Get the list of VkFormat's that are supported:
@@ -415,14 +409,9 @@ vut_get_surface_format(VkPhysicalDevice gpu,
 }
 
 VuResult
-vut_init_swapchain(VkPhysicalDevice gpu,
-                   VkDevice device,
-                   VkSurfaceKHR surface,
-                   VkSurfaceCapabilitiesKHR capabilities,
-                   VkExtent2D extent,
-                   VkFormat format,
-                   VkPresentModeKHR present_mode,
-                   VkColorSpaceKHR color_space,
+vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
+                   VkSurfaceCapabilitiesKHR capabilities, VkExtent2D extent, VkFormat format,
+                   VkPresentModeKHR present_mode, VkColorSpaceKHR color_space,
                    VkSwapchainKHR* swapchain)
 {
     VkSwapchainKHR old_swapchain = *swapchain;
@@ -501,11 +490,8 @@ vut_init_swapchain(VkPhysicalDevice gpu,
 }
 
 VuResult
-vut_init_image_view(VkDevice device,
-                    VkFormat format,
-                    VkImage swapchain_image,
-                    VkImageView* image_view,
-                    bool is_depth)
+vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
+                    VkImageView* image_view, bool is_depth)
 {
     const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -588,8 +574,7 @@ vut_init_shader_module(VkDevice device, char* shader_name, VkShaderModule* shade
 }
 
 VuResult
-vut_init_pipeline_layout(VkDevice device,
-                         VkDescriptorSetLayout* descriptor_layout,
+vut_init_pipeline_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout,
                          VkPipelineLayout* pipeline_layout)
 {
     const VkPipelineLayoutCreateInfo create_info = {
@@ -649,17 +634,14 @@ vut_init_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* rende
 }
 
 VuResult
-vut_init_pipeline(VkDevice device,
-                  const VkPipelineShaderStageCreateInfo stages[],
+vut_init_pipeline(VkDevice device, const VkPipelineShaderStageCreateInfo stages[],
                   const VkPipelineVertexInputStateCreateInfo* vertex_input,
                   const VkPipelineInputAssemblyStateCreateInfo* input_assembly,
                   const VkPipelineViewportStateCreateInfo* viewport_state,
                   const VkPipelineRasterizationStateCreateInfo* rasterizer,
                   const VkPipelineMultisampleStateCreateInfo* multisampling,
                   const VkPipelineColorBlendStateCreateInfo* color_blending,
-                  VkPipelineLayout pipeline_layout,
-                  VkRenderPass render_pass,
-                  VkPipeline* pipeline)
+                  VkPipelineLayout pipeline_layout, VkRenderPass render_pass, VkPipeline* pipeline)
 {
     VkGraphicsPipelineCreateInfo pipelineInfo = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -686,64 +668,112 @@ vut_init_pipeline(VkDevice device,
     }
 }
 
+VuResult
+vut_init_framebuffer(VkDevice device, VkRenderPass render_pass, VkImageView image_view,
+                     VkExtent2D window_extent, VkFramebuffer* framebuffer)
+{
+    VkImageView attachments[] = { image_view };
+
+    const VkFramebufferCreateInfo create_info = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .pNext = NULL,
+        .renderPass = render_pass,
+        .attachmentCount = 1,
+        .pAttachments = attachments,
+        .width = window_extent.width,
+        .height = window_extent.height,
+        .layers = 1,
+    };
+
+    VkResult result = vkCreateFramebuffer(device, &create_info, NULL, framebuffer);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+// Command Buffers
+
+VuResult
+vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
+{
+    const VkCommandPoolCreateInfo command_pool_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .queueFamilyIndex = family_index,
+    };
+
+    VkResult result = vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_alloc_command_buffer(VkDevice device, VkCommandPool command_pool, uint32_t count,
+                         VkCommandBuffer* command_buffer)
+{
+    const VkCommandBufferAllocateInfo alloc_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .pNext = NULL,
+        .commandPool = command_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = count,
+    };
+
+    VkResult result = vkAllocateCommandBuffers(device, &alloc_info, command_buffer);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_begin_command_buffer(VkCommandBuffer command_buffer)
+{
+    const VkCommandBufferBeginInfo buffer_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .pNext = NULL,
+        .flags = 0,
+        .pInheritanceInfo = NULL,
+    };
+
+    VkResult result = vkBeginCommandBuffer(command_buffer, &buffer_begin_info);
+    if (result) {
+        // Error
+    }
+
+    return VUR_SUCCESS;
+}
+
+VuResult
+vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFramebuffer framebuffer,
+                      VkExtent2D extent)
+{
+    VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+    const VkRenderPassBeginInfo render_pass_begin = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = render_pass,
+        .framebuffer = framebuffer,
+        .renderArea.offset = { 0, 0 },
+        .renderArea.extent = extent,
+        .clearValueCount = 1,
+        .pClearValues = &clearColor,
+    };
+
+    vkCmdBeginRenderPass(buffer, &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+    return VUR_SUCCESS;
+}
+
 // VuResult
-// vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
-// {
-//     const VkCommandPoolCreateInfo command_pool_info = {
-//         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-//         .pNext = NULL,
-//         .flags = 0,
-//         .queueFamilyIndex = family_index,
-//     };
-
-//     VkResult result = vkCreateCommandPool(device, &command_pool_info, NULL, command_pool);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
-// }
-
-// VuResult
-// vut_alloc_command_buffer(VkDevice device, VkCommandPool command_pool, uint32_t count,
-//                          VkCommandBuffer* command_buffer)
-// {
-//     const VkCommandBufferAllocateInfo alloc_info = {
-//         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-//         .pNext = NULL,
-//         .commandPool = command_pool,
-//         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-//         .commandBufferCount = count,
-//     };
-
-//     VkResult result = vkAllocateCommandBuffers(device, &alloc_info, command_buffer);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
-// }
-
-// VuResult
-// vut_begin_command_buffer(VkCommandBuffer command_buffer)
-// {
-//     const VkCommandBufferBeginInfo buffer_begin_info = {
-//         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-//         .pNext = NULL,
-//         .flags = 0,
-//         .pInheritanceInfo = NULL,
-//     };
-
-//     VkResult result = vkBeginCommandBuffer(command_buffer, &buffer_begin_info);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
-// }
-
-// VuResult
-// vut_init_image(VkDevice device, VkFormat format, uint32_t width, uint32_t height, VkImage*
+// vut_init_image(VkDevice device, VkFormat format, VkExtent2D window_extent, VkImage*
 // image)
 // {
 //     const VkImageCreateInfo image_info = {
@@ -751,7 +781,7 @@ vut_init_pipeline(VkDevice device,
 //         .pNext = NULL,
 //         .imageType = VK_IMAGE_TYPE_2D,
 //         .format = format,
-//         .extent = { width, height, 1 },
+//         .extent = { window_extent.width, window_extent.height, 1 },
 //         .mipLevels = 1,
 //         .arrayLayers = 1,
 //         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -883,51 +913,6 @@ vut_init_pipeline(VkDevice device,
 //         writes[1].dstSet = swapchain_image_resources[i].descriptor_set;
 //         vkUpdateDescriptorSets(device, 2, writes, 0, NULL);
 //     }
-// }
-
-// VuResult
-// vut_init_framebuffer(VkDevice device, VkRenderPass render_pass, VkImageView depth_view,
-//                      VkImageView image_view, uint32_t width, uint32_t height,
-//                      VkFramebuffer* framebuffer)
-// {
-//     VkImageView attachments[2];
-//     attachments[1] = depth_view;
-
-//     const VkFramebufferCreateInfo create_info = {
-//         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-//         .pNext = NULL,
-//         .renderPass = render_pass,
-//         .attachmentCount = 2,
-//         .pAttachments = attachments,
-//         .width = width,
-//         .height = height,
-//         .layers = 1,
-//     };
-
-//     attachments[0] = image_view;
-//     VkResult result = vkCreateFramebuffer(device, &create_info, NULL, framebuffer);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VUR_SUCCESS;
-// }
-
-// const VkSubmitInfo
-// vut_init_submit_info(VkSemaphore* present_complete, VkSemaphore* render_complete)
-// {
-//     const VkPipelineStageFlags flags[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-//     const VkSubmitInfo submit_info = {
-//         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-//         .pWaitDstStageMask = flags,
-//         .waitSemaphoreCount = 1,
-//         .pWaitSemaphores = present_complete,
-//         .signalSemaphoreCount = 1,
-//         .pSignalSemaphores = render_complete,
-//     };
-
-//     return submit_info;
 // }
 
 // VuResult
