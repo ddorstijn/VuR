@@ -33,6 +33,13 @@ vur_init(VulkanContext* ctx, const char* app_name)
     vur_record_buffers(ctx);
 }
 
+static void
+vur_framebuffer_resize_callback(GLFWwindow* window, int width, int height)
+{
+    VulkanContext* ctx = (VulkanContext*)glfwGetWindowUserPointer(window);
+    ctx->framebuffer_resized = true;
+}
+
 void
 vur_update_window_size(VulkanContext* ctx)
 {
@@ -46,6 +53,8 @@ vur_setup_window(VulkanContext* ctx)
 {
     vut_init_window(ctx->name, &ctx->window);
     vur_update_window_size(ctx);
+    glfwSetWindowUserPointer(ctx->window, ctx);
+    glfwSetFramebufferSizeCallback(ctx->window, vur_framebuffer_resize_callback);
 }
 
 void
@@ -85,11 +94,8 @@ void
 vur_create_device(VulkanContext* ctx)
 {
     // Get a queue which supports graphics and create a logical device
-    vut_get_queue_family_indices(ctx->gpu,
-                                 ctx->surface,
-                                 &ctx->graphics_queue_family_index,
-                                 &ctx->present_queue_family_index,
-                                 &ctx->separate_present_queue);
+    vut_get_queue_family_indices(ctx->gpu, ctx->surface, &ctx->graphics_queue_family_index,
+                                 &ctx->present_queue_family_index, &ctx->separate_present_queue);
 
     vut_init_device(ctx->gpu, ctx->graphics_queue_family_index, &ctx->device);
 
@@ -126,10 +132,8 @@ vur_prepare(VulkanContext* ctx)
     vur_prepare_pipeline(ctx);
 
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vut_prepare_framebuffer(ctx->device,
-                                ctx->render_pass,
-                                ctx->swapchain_image_resources[i].view,
-                                ctx->window_extent,
+        vut_prepare_framebuffer(ctx->device, ctx->render_pass,
+                                ctx->swapchain_image_resources[i].view, ctx->window_extent,
                                 &ctx->swapchain_image_resources[i].framebuffer);
     }
 
@@ -152,15 +156,8 @@ vur_prepare_swapchain(VulkanContext* ctx)
     VkExtent2D extent = vut_get_swapchain_extent(capabilities, ctx->window_extent);
     vut_get_surface_format(ctx->gpu, ctx->surface, &ctx->surface_format, &ctx->color_space);
 
-    vut_init_swapchain(ctx->gpu,
-                       ctx->device,
-                       ctx->surface,
-                       capabilities,
-                       extent,
-                       ctx->surface_format,
-                       present_mode,
-                       ctx->color_space,
-                       &ctx->swapchain);
+    vut_init_swapchain(ctx->gpu, ctx->device, ctx->surface, capabilities, extent,
+                       ctx->surface_format, present_mode, ctx->color_space, &ctx->swapchain);
 }
 
 void
@@ -172,21 +169,19 @@ vur_prepare_image_views(VulkanContext* ctx)
         // Error
     }
     VkImage swapchain_images[ctx->swapchain_image_count];
-    if (vkGetSwapchainImagesKHR(
-          ctx->device, ctx->swapchain, &ctx->swapchain_image_count, swapchain_images) !=
-        VK_SUCCESS) {
+    if (vkGetSwapchainImagesKHR(ctx->device, ctx->swapchain, &ctx->swapchain_image_count,
+                                swapchain_images) != VK_SUCCESS) {
         // Error
     }
 
     // This needs to be freed in Destroy
     ctx->swapchain_image_resources =
-      malloc(sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
+        malloc(sizeof(SwapchainImageResources) * ctx->swapchain_image_count);
 
     // Init all the resources
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
         ctx->swapchain_image_resources[i].image = swapchain_images[i];
-        vut_init_image_view(ctx->device,
-                            ctx->surface_format,
+        vut_init_image_view(ctx->device, ctx->surface_format,
                             ctx->swapchain_image_resources[i].image,
                             &ctx->swapchain_image_resources[i].view);
     }
@@ -291,17 +286,9 @@ vur_prepare_pipeline(VulkanContext* ctx)
     };
 
     vut_init_pipeline_layout(ctx->device, NULL, &ctx->pipeline_layout);
-    vut_init_pipeline(ctx->device,
-                      shader_stages,
-                      &vertex_input,
-                      &input_assembly,
-                      &viewport_state,
-                      &rasterizer,
-                      &multisampling,
-                      &color_blending,
-                      ctx->pipeline_layout,
-                      ctx->render_pass,
-                      &ctx->pipeline);
+    vut_init_pipeline(ctx->device, shader_stages, &vertex_input, &input_assembly, &viewport_state,
+                      &rasterizer, &multisampling, &color_blending, ctx->pipeline_layout,
+                      ctx->render_pass, &ctx->pipeline);
 
     vkDestroyShaderModule(ctx->device, vert_shader_module, NULL);
     vkDestroyShaderModule(ctx->device, frag_shader_module, NULL);
@@ -311,8 +298,8 @@ void
 vur_prepare_buffers(VulkanContext* ctx)
 {
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
-        vut_alloc_command_buffer(
-          ctx->device, ctx->command_pool, 1, &ctx->swapchain_image_resources[i].command_buffer);
+        vut_alloc_command_buffer(ctx->device, ctx->command_pool, 1,
+                                 &ctx->swapchain_image_resources[i].command_buffer);
     }
 }
 
@@ -323,15 +310,12 @@ vur_record_buffers(VulkanContext* ctx)
 {
     for (size_t i = 0; i < ctx->swapchain_image_count; i++) {
         vut_begin_command_buffer(ctx->swapchain_image_resources[i].command_buffer);
-        vut_begin_render_pass(ctx->swapchain_image_resources[i].command_buffer,
-                              ctx->render_pass,
-                              ctx->swapchain_image_resources[i].framebuffer,
-                              ctx->window_extent);
+        vut_begin_render_pass(ctx->swapchain_image_resources[i].command_buffer, ctx->render_pass,
+                              ctx->swapchain_image_resources[i].framebuffer, ctx->window_extent);
 
         // Bind pipeline to command buffer and specify its type (graphics or compute)
         vkCmdBindPipeline(ctx->swapchain_image_resources[i].command_buffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          ctx->pipeline);
+                          VK_PIPELINE_BIND_POINT_GRAPHICS, ctx->pipeline);
 
         // Record the pipeline in the command buffer
         vkCmdDraw(ctx->swapchain_image_resources[i].command_buffer, 3, 1, 0, 0);
@@ -351,14 +335,11 @@ vur_draw(VulkanContext* ctx)
 {
     VkResult result;
 
-    result = vkWaitForFences(ctx->device, 1, &ctx->fences[ctx->frame_index], VK_TRUE, 1000);
+    result = vkWaitForFences(ctx->device, 1, &ctx->fences[ctx->frame_index], VK_TRUE, UINT64_MAX);
 
     uint32_t imageIndex;
-    result = vkAcquireNextImageKHR(ctx->device,
-                                   ctx->swapchain,
-                                   UINT64_MAX,
-                                   ctx->image_acquired_semaphores[ctx->frame_index],
-                                   VK_NULL_HANDLE,
+    result = vkAcquireNextImageKHR(ctx->device, ctx->swapchain, UINT64_MAX,
+                                   ctx->image_acquired_semaphores[ctx->frame_index], VK_NULL_HANDLE,
                                    &imageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
@@ -403,7 +384,9 @@ vur_draw(VulkanContext* ctx)
     };
 
     vkQueuePresentKHR(ctx->present_queue, &present_info);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR ||
+        ctx->framebuffer_resized) {
+        ctx->framebuffer_resized = false;
         vur_resize(ctx);
         return;
     } else if (result != VK_SUCCESS) {
@@ -428,8 +411,7 @@ vur_resize(VulkanContext* ctx)
 
     vur_destroy_pipeline(ctx);
 
-    printf("Resizing window! Current size is { %d, %d }\n",
-           ctx->window_extent.width,
+    printf("Resizing window! Current size is { %d, %d }\n", ctx->window_extent.width,
            ctx->window_extent.height);
     // Second, re-perform the vur_prepare() function, which will re-create the
     // swapchain:
@@ -450,8 +432,8 @@ vur_destroy_pipeline(VulkanContext* ctx)
 
     for (uint32_t i = 0; i < ctx->swapchain_image_count; i++) {
         vkDestroyImageView(ctx->device, ctx->swapchain_image_resources[i].view, NULL);
-        vkFreeCommandBuffers(
-          ctx->device, ctx->command_pool, 1, &ctx->swapchain_image_resources[i].command_buffer);
+        vkFreeCommandBuffers(ctx->device, ctx->command_pool, 1,
+                             &ctx->swapchain_image_resources[i].command_buffer);
     }
     free(ctx->swapchain_image_resources);
 }
