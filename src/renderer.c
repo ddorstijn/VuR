@@ -198,8 +198,8 @@ vur_prepare_pipeline(VulkanContext* ctx)
     VkShaderModule vert_shader_module;
     VkShaderModule frag_shader_module;
 
-    vut_init_shader_module(ctx->device, "shaders/shader.vert.spv", &vert_shader_module);
-    vut_init_shader_module(ctx->device, "shaders/shader.frag.spv", &frag_shader_module);
+    vut_init_shader_module(ctx->device, "../shaders/shader.vert.spv", &vert_shader_module);
+    vut_init_shader_module(ctx->device, "../shaders/shader.frag.spv", &frag_shader_module);
 
     const VkPipelineShaderStageCreateInfo vert_shader_stage = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
