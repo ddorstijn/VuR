@@ -2,6 +2,7 @@ add_library(
     vulkan_renderer
     renderer.c
     renderer.h
+    internal.h
     vk_util.c
     vk_util.h
 )

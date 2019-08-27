@@ -8,7 +8,6 @@
 #include "../extern/cglm/include/cglm/cglm.h"
 
 #define FRAME_LAG 2
-#define TEXTURE_COUNT 1
 
 /*
  * structure to track all objects related to a texture.
@@ -42,10 +41,8 @@ typedef struct
     VkDescriptorSet descriptor_set;
 } SwapchainImageResources;
 
-typedef struct
+typedef struct _VulkanContext
 {
-    VkSurfaceKHR surface;
-    bool prepared;
     bool separate_present_queue;
 
     GLFWwindow* window;
@@ -61,17 +58,16 @@ typedef struct
     uint32_t present_queue_family_index;
     VkSemaphore image_acquired_semaphores[FRAME_LAG];
     VkSemaphore draw_complete_semaphores[FRAME_LAG];
-    VkSemaphore image_ownership_semaphores[FRAME_LAG];
 
-    VkFormat format;
+    VkFormat surface_format;
     VkColorSpaceKHR color_space;
 
-    uint32_t swapchain_image_count;
+    VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
+    uint32_t swapchain_image_count;
     SwapchainImageResources* swapchain_image_resources;
     VkPresentModeKHR present_mode;
     VkFence fences[FRAME_LAG];
-    int frame_index;
 
     VkCommandPool command_pool;
     VkCommandPool present_command_pool;
@@ -86,41 +82,33 @@ typedef struct
         VkImageView view;
     } depth;
 
-    struct texture_object textures[TEXTURE_COUNT];
-    struct texture_object staging_texture;
-
-    VkCommandBuffer command_buffer; // Buffer for initialization commands
     VkPipelineLayout pipeline_layout;
-    VkDescriptorSetLayout descriptor_layout;
-    VkPipelineCache pipeline_cache;
-    VkRenderPass render_pass;
     VkPipeline pipeline;
+
+    VkDescriptorSetLayout descriptor_layout;
+    VkDescriptorPool descriptor_pool;
+
+    VkRenderPass render_pass;
 
     mat4 projection;
     mat4 view;
     mat4 model;
 
-    bool pause;
     bool should_quit;
     bool framebuffer_resized;
 
-    VkDescriptorPool descriptor_pool;
-
     uint32_t current_buffer;
-    uint32_t queue_family_count;
+    int frame_index;
 } VulkanContext;
 
 // Init
 void
-vur_init_vulkan(VulkanContext* ctx, const char* app_name);
-
-void
-vur_prepare(VulkanContext* ctx);
-
-void
-vur_record_buffers(VulkanContext* ctx);
+vur_init(VulkanContext* ctx, const char* app_name);
 
 // Main loop
+void
+vur_update_window(VulkanContext* ctx);
+
 void
 vur_draw(VulkanContext* ctx);
 

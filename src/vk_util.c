@@ -1,3 +1,14 @@
+/**
+ * @file vk_util.c
+ * @author Danny Dorstijn (dannydorstijn1997@gmail.com)
+ * @brief Vulkan Utility Functions. Initializers and tools
+ * @version 0.8
+ * @date 2019-08-27
+ *
+ * @copyright Copyright (c) 2019
+ *
+ */
+
 #include "vk_util.h"
 
 #include <stdio.h>
@@ -48,15 +59,15 @@ get_required_extensions(uint32_t* extension_count, const char* extensions[])
 #endif // DEBUG
 }
 
-VuResult
+bool
 vut_init_window(const char app_name[], GLFWwindow** window)
 {
     if (!glfwInit()) {
-        return VUR_GLFW_INIT_FAILED;
+        // Error
     }
 
     if (!glfwVulkanSupported()) {
-        return VUR_VULKAN_NOT_SUPPORTED;
+        // Error
     }
 
     // Options not necessary for Vulkan
@@ -64,13 +75,13 @@ vut_init_window(const char app_name[], GLFWwindow** window)
     *window = glfwCreateWindow(640, 480, app_name, NULL, NULL);
     if (!*window) {
         // Window or OpenGL context creation failed
-        return VUR_WINDOW_CREATION_FAILED;
+        // Error
     }
 
-    return VUR_SUCCESS;
+    return true;
 }
 
-VuResult
+VkResult
 vut_init_instance(const char app_name[], VkInstance* instance)
 {
     // Create app info for Vulkan
@@ -109,29 +120,30 @@ vut_init_instance(const char app_name[], VkInstance* instance)
 
     VkResult result = vkCreateInstance(&instance_info, NULL, instance);
     if (result) {
-        return VUR_INSTANCE_CREATION_FAILED;
+        return result;
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
 vut_get_physical_devices(VkInstance instance, uint32_t* gpu_count, VkPhysicalDevice gpus[])
 {
     // If gpus is NULL then we only get the count. Else we fill the gpu
     VkResult result = vkEnumeratePhysicalDevices(instance, gpu_count, gpus);
     if (result) {
-        VUR_DEVICE_CREATION_FAILED;
+        // Error
+        return result;
     }
 
     if (*gpu_count == 0) {
-        VUR_DEVICE_CREATION_FAILED;
+        // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
 vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalDevice gpu[])
 {
     int discrete_device_index = -1;
@@ -175,28 +187,31 @@ vut_pick_physical_device(VkPhysicalDevice* gpus, uint32_t gpu_count, VkPhysicalD
         } else if (intergrated_device_index != -1) {
             *gpu = gpus[intergrated_device_index];
         } else {
-            return VUR_PHYSICIAL_DEVICE_CREATION_FAILED;
+            // Error
         }
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
-                             uint32_t* queue_family_count, uint32_t* graphics_queue_family_index,
-                             uint32_t* present_queue_family_index, bool* separate_present_queue)
+VkResult
+vut_get_queue_family_indices(VkPhysicalDevice gpu,
+                             VkSurfaceKHR surface,
+                             uint32_t* graphics_queue_family_index,
+                             uint32_t* present_queue_family_index,
+                             bool* separate_present_queue)
 {
     // Retrieve count by passing NULL
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, NULL);
-    VkQueueFamilyProperties queue_properties[*queue_family_count];
+    uint32_t queue_family_count;
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, NULL);
+    VkQueueFamilyProperties queue_properties[queue_family_count];
 
     // Fill the queue family properties array
-    vkGetPhysicalDeviceQueueFamilyProperties(gpu, queue_family_count, queue_properties);
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queue_family_count, queue_properties);
 
     // Iterate over each queue to learn whether it supports presenting:
-    VkBool32 supports_present[*queue_family_count];
-    for (uint32_t i = 0; i < *queue_family_count; i++) {
+    VkBool32 supports_present[queue_family_count];
+    for (uint32_t i = 0; i < queue_family_count; i++) {
         vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &supports_present[i]);
     }
 
@@ -204,7 +219,7 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     // families, try to find one that supports both
     uint32_t graphics_index = UINT32_MAX;
     uint32_t present_index = UINT32_MAX;
-    for (uint32_t i = 0; i < *queue_family_count; i++) {
+    for (uint32_t i = 0; i < queue_family_count; i++) {
         if ((queue_properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0) {
             if (graphics_index == UINT32_MAX) {
                 graphics_index = i;
@@ -221,7 +236,7 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     if (present_index == UINT32_MAX) {
         // If didn't find a queue that supports both graphics and present, then
         // find a separate present queue.
-        for (uint32_t i = 0; i < *queue_family_count; ++i) {
+        for (uint32_t i = 0; i < queue_family_count; ++i) {
             if (supports_present[i] == VK_TRUE) {
                 present_index = i;
                 break;
@@ -239,7 +254,7 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu, VkSurfaceKHR surface,
     *separate_present_queue = (graphics_index != present_index);
 }
 
-VuResult
+VkResult
 vut_init_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDevice* device)
 {
     // When using a single queue no priority is required
@@ -276,10 +291,21 @@ vut_init_device(VkPhysicalDevice gpu, uint32_t graphics_queue_family_index, VkDe
         abort();
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
+vut_init_surface(VkInstance instance, GLFWwindow* window, VkSurfaceKHR* surface)
+{
+    // Let GLFW handle cross-platform surface creation
+    if (glfwCreateWindowSurface(instance, window, NULL, surface) != VK_SUCCESS) {
+        // Error
+    }
+
+    return VK_SUCCESS;
+}
+
+VkResult
 vut_init_semaphore(VkDevice device, VkSemaphore* semaphore)
 {
     const VkSemaphoreCreateInfo semaphore_info = {
@@ -293,10 +319,10 @@ vut_init_semaphore(VkDevice device, VkSemaphore* semaphore)
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
 vut_init_fence(VkDevice device, VkFence* fence)
 {
     const VkFenceCreateInfo fence_info = {
@@ -310,13 +336,14 @@ vut_init_fence(VkDevice device, VkFence* fence)
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
 /// Swapchain
 
 VkPresentModeKHR
-vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities, VkPhysicalDevice gpu,
+vut_get_present_mode(VkSurfaceCapabilitiesKHR capabilities,
+                     VkPhysicalDevice gpu,
                      VkSurfaceKHR surface)
 {
     uint32_t count;
@@ -378,8 +405,10 @@ vut_get_swapchain_extent(VkSurfaceCapabilitiesKHR capabilities, VkExtent2D windo
     return extent;
 }
 
-VuResult
-vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* format,
+VkResult
+vut_get_surface_format(VkPhysicalDevice gpu,
+                       VkSurfaceKHR surface,
+                       VkFormat* format,
                        VkColorSpaceKHR* color_space)
 {
     // Get the list of VkFormat's that are supported:
@@ -405,13 +434,18 @@ vut_get_surface_format(VkPhysicalDevice gpu, VkSurfaceKHR surface, VkFormat* for
     }
     *color_space = surface_formats[0].colorSpace;
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
-                   VkSurfaceCapabilitiesKHR capabilities, VkExtent2D extent, VkFormat format,
-                   VkPresentModeKHR present_mode, VkColorSpaceKHR color_space,
+VkResult
+vut_init_swapchain(VkPhysicalDevice gpu,
+                   VkDevice device,
+                   VkSurfaceKHR surface,
+                   VkSurfaceCapabilitiesKHR capabilities,
+                   VkExtent2D extent,
+                   VkFormat format,
+                   VkPresentModeKHR present_mode,
+                   VkColorSpaceKHR color_space,
                    VkSwapchainKHR* swapchain)
 {
     VkSwapchainKHR old_swapchain = *swapchain;
@@ -486,12 +520,15 @@ vut_init_swapchain(VkPhysicalDevice gpu, VkDevice device, VkSurfaceKHR surface,
         vkDestroySwapchainKHR(device, old_swapchain, NULL);
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
-                    VkImageView* image_view, bool is_depth)
+VkResult
+vut_init_image_view(VkDevice device,
+                    VkFormat format,
+                    VkImage swapchain_image,
+                    VkImageView* image_view,
+                    bool is_depth)
 {
     const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -524,11 +561,11 @@ vut_init_image_view(VkDevice device, VkFormat format, VkImage swapchain_image,
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
 // Pipeline
-VuResult
+VkResult
 read_shader_file(const char* name, size_t* size, uint32_t code[])
 {
     if (code == NULL) {
@@ -537,7 +574,7 @@ read_shader_file(const char* name, size_t* size, uint32_t code[])
             *size = sb.st_size;
         }
 
-        return VUR_SUCCESS;
+        return VK_SUCCESS;
     }
 
     FILE* shader;
@@ -551,10 +588,10 @@ read_shader_file(const char* name, size_t* size, uint32_t code[])
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
 vut_init_shader_module(VkDevice device, char* shader_name, VkShaderModule* shader_module)
 {
     size_t size;
@@ -573,8 +610,9 @@ vut_init_shader_module(VkDevice device, char* shader_name, VkShaderModule* shade
     }
 }
 
-VuResult
-vut_init_pipeline_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout,
+VkResult
+vut_init_pipeline_layout(VkDevice device,
+                         VkDescriptorSetLayout* descriptor_layout,
                          VkPipelineLayout* pipeline_layout)
 {
     const VkPipelineLayoutCreateInfo create_info = {
@@ -589,11 +627,11 @@ vut_init_pipeline_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layo
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_init_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* render_pass)
+VkResult
+vut_prepare_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* render_pass)
 {
     VkAttachmentDescription color_attachment = {
         .format = color_format,
@@ -630,18 +668,21 @@ vut_init_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* rende
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_init_pipeline(VkDevice device, const VkPipelineShaderStageCreateInfo stages[],
+VkResult
+vut_init_pipeline(VkDevice device,
+                  const VkPipelineShaderStageCreateInfo stages[],
                   const VkPipelineVertexInputStateCreateInfo* vertex_input,
                   const VkPipelineInputAssemblyStateCreateInfo* input_assembly,
                   const VkPipelineViewportStateCreateInfo* viewport_state,
                   const VkPipelineRasterizationStateCreateInfo* rasterizer,
                   const VkPipelineMultisampleStateCreateInfo* multisampling,
                   const VkPipelineColorBlendStateCreateInfo* color_blending,
-                  VkPipelineLayout pipeline_layout, VkRenderPass render_pass, VkPipeline* pipeline)
+                  VkPipelineLayout pipeline_layout,
+                  VkRenderPass render_pass,
+                  VkPipeline* pipeline)
 {
     VkGraphicsPipelineCreateInfo pipelineInfo = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -668,9 +709,12 @@ vut_init_pipeline(VkDevice device, const VkPipelineShaderStageCreateInfo stages[
     }
 }
 
-VuResult
-vut_init_framebuffer(VkDevice device, VkRenderPass render_pass, VkImageView image_view,
-                     VkExtent2D window_extent, VkFramebuffer* framebuffer)
+VkResult
+vut_prepare_framebuffer(VkDevice device,
+                        VkRenderPass render_pass,
+                        VkImageView image_view,
+                        VkExtent2D window_extent,
+                        VkFramebuffer* framebuffer)
 {
     VkImageView attachments[] = { image_view };
 
@@ -690,12 +734,12 @@ vut_init_framebuffer(VkDevice device, VkRenderPass render_pass, VkImageView imag
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
 // Command Buffers
 
-VuResult
+VkResult
 vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* command_pool)
 {
     const VkCommandPoolCreateInfo command_pool_info = {
@@ -710,11 +754,13 @@ vut_init_command_pool(VkDevice device, uint32_t family_index, VkCommandPool* com
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_alloc_command_buffer(VkDevice device, VkCommandPool command_pool, uint32_t count,
+VkResult
+vut_alloc_command_buffer(VkDevice device,
+                         VkCommandPool command_pool,
+                         uint32_t count,
                          VkCommandBuffer* command_buffer)
 {
     const VkCommandBufferAllocateInfo alloc_info = {
@@ -730,10 +776,10 @@ vut_alloc_command_buffer(VkDevice device, VkCommandPool command_pool, uint32_t c
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
+VkResult
 vut_begin_command_buffer(VkCommandBuffer command_buffer)
 {
     const VkCommandBufferBeginInfo buffer_begin_info = {
@@ -748,11 +794,13 @@ vut_begin_command_buffer(VkCommandBuffer command_buffer)
         // Error
     }
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-VuResult
-vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFramebuffer framebuffer,
+VkResult
+vut_begin_render_pass(VkCommandBuffer buffer,
+                      VkRenderPass render_pass,
+                      VkFramebuffer framebuffer,
                       VkExtent2D extent)
 {
     VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -769,10 +817,10 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 
     vkCmdBeginRenderPass(buffer, &render_pass_begin, VK_SUBPASS_CONTENTS_INLINE);
 
-    return VUR_SUCCESS;
+    return VK_SUCCESS;
 }
 
-// VuResult
+// VkResult
 // vut_init_image(VkDevice device, VkFormat format, VkExtent2D window_extent, VkImage*
 // image)
 // {
@@ -795,10 +843,10 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 //         // Error
 //     }
 
-//     return VUR_SUCCESS;
+//     return VK_SUCCESS;
 // }
 
-// VuResult
+// VkResult
 // vut_init_descriptor_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout)
 // {
 //     const VkDescriptorSetLayoutBinding layout_bindings[2] = {
@@ -831,10 +879,10 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 //         // Error
 //     }
 
-//     return VUR_SUCCESS;
+//     return VK_SUCCESS;
 // }
 
-// VuResult
+// VkResult
 // vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool*
 // descriptor_pool)
 // {
@@ -863,10 +911,10 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 //         // Error
 //     }
 
-//     return VUR_SUCCESS;
+//     return VK_SUCCESS;
 // }
 
-// VuResult
+// VkResult
 // vut_init_descriptor_set(VkDevice device, VkSampler sampler, VkImageView view,
 // VkDescriptorPool pool,
 //                         VkDescriptorSetLayout* layout, VkDescriptorSet* set)
@@ -915,7 +963,7 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 //     }
 // }
 
-// VuResult
+// VkResult
 // vut_build_image_ownership_cmd(VkCommandBuffer present_buffer, uint32_t
 // graphics_queue_family_index,
 //                               uint32_t present_queue_family_index, VkImage swapchain_image)
@@ -954,5 +1002,5 @@ vut_begin_render_pass(VkCommandBuffer buffer, VkRenderPass render_pass, VkFrameb
 //         // Error
 //     }
 
-//     return VUR_SUCCESS;
+//     return VK_SUCCESS;
 // }
