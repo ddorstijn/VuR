@@ -2,6 +2,9 @@
 # Created by https://www.gitignore.io/api/c,git,cmake,visualstudiocode
 # Edit at https://www.gitignore.io/?templates=c,git,cmake,visualstudiocode
 
+### Docs ###
+docs/
+
 ### C ###
 # Prerequisites
 *.d
