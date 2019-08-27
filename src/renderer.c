@@ -1,3 +1,14 @@
+/**
+ * @file renderer.c
+ * @author Danny Dorstijn (dannydorstijn1997@gmail.com)
+ * @brief The main code for the renderer
+ * @version 0.1
+ * @date 2019-08-27
+ *
+ * @copyright Copyright (c) 2019
+ *
+ */
+
 #include "renderer.h"
 #include "internal.h"
 
@@ -109,15 +120,6 @@ vur_setup_synchronization(VulkanContext* ctx)
 void
 vur_prepare(VulkanContext* ctx)
 {
-    // // Prepare GPU data
-    // vur_prepare_depth(ctx);
-    // vur_prepare_textures(ctx);
-    // vur_prepare_meshes(ctx);
-
-    // vut_init_descriptor_layout(ctx->device, &ctx->descriptor_layout);
-    // vut_init_descriptor_pool(ctx->device, ctx->swapchain_image_count, &ctx->descriptor_pool);
-    // vut_init_descriptor_set();
-
     vur_prepare_swapchain(ctx);
     vur_prepare_image_views(ctx);
     vut_prepare_render_pass(ctx->device, ctx->surface_format, &ctx->render_pass);
@@ -186,10 +188,10 @@ vur_prepare_image_views(VulkanContext* ctx)
         vut_init_image_view(ctx->device,
                             ctx->surface_format,
                             ctx->swapchain_image_resources[i].image,
-                            &ctx->swapchain_image_resources[i].view,
-                            false);
+                            &ctx->swapchain_image_resources[i].view);
     }
 }
+
 void
 vur_prepare_pipeline(VulkanContext* ctx)
 {

@@ -527,8 +527,7 @@ VkResult
 vut_init_image_view(VkDevice device,
                     VkFormat format,
                     VkImage swapchain_image,
-                    VkImageView* image_view,
-                    bool is_depth)
+                    VkImageView* image_view)
 {
     const VkImageSubresourceRange range = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -631,10 +630,10 @@ vut_init_pipeline_layout(VkDevice device,
 }
 
 VkResult
-vut_prepare_render_pass(VkDevice device, VkFormat color_format, VkRenderPass* render_pass)
+vut_prepare_render_pass(VkDevice device, VkFormat surface_format, VkRenderPass* render_pass)
 {
     VkAttachmentDescription color_attachment = {
-        .format = color_format,
+        .format = surface_format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -819,188 +818,3 @@ vut_begin_render_pass(VkCommandBuffer buffer,
 
     return VK_SUCCESS;
 }
-
-// VkResult
-// vut_init_image(VkDevice device, VkFormat format, VkExtent2D window_extent, VkImage*
-// image)
-// {
-//     const VkImageCreateInfo image_info = {
-//         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-//         .pNext = NULL,
-//         .imageType = VK_IMAGE_TYPE_2D,
-//         .format = format,
-//         .extent = { window_extent.width, window_extent.height, 1 },
-//         .mipLevels = 1,
-//         .arrayLayers = 1,
-//         .samples = VK_SAMPLE_COUNT_1_BIT,
-//         .tiling = VK_IMAGE_TILING_OPTIMAL,
-//         .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-//         .flags = 0,
-//     };
-
-//     VkResult result = vkCreateImage(device, &image_info, NULL, image);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VK_SUCCESS;
-// }
-
-// VkResult
-// vut_init_descriptor_layout(VkDevice device, VkDescriptorSetLayout* descriptor_layout)
-// {
-//     const VkDescriptorSetLayoutBinding layout_bindings[2] = {
-//         [0] =
-//             {
-//                 .binding = 0,
-//                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-//                 .descriptorCount = 1,
-//                 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-//                 .pImmutableSamplers = NULL,
-//             },
-//         [1] =
-//             {
-//                 .binding = 1,
-//                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-//                 .descriptorCount = DEMO_TEXTURE_COUNT,
-//                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-//                 .pImmutableSamplers = NULL,
-//             },
-//     };
-//     const VkDescriptorSetLayoutCreateInfo create_info = {
-//         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-//         .pNext = NULL,
-//         .bindingCount = 2,
-//         .pBindings = layout_bindings,
-//     };
-
-//     VkResult result = vkCreateDescriptorSetLayout(device, &create_info, NULL,
-//     descriptor_layout); if (result) {
-//         // Error
-//     }
-
-//     return VK_SUCCESS;
-// }
-
-// VkResult
-// vut_init_descriptor_pool(VkDevice device, uint32_t image_count, VkDescriptorPool*
-// descriptor_pool)
-// {
-//     const VkDescriptorPoolSize type_counts[2] = {
-//         [0] =
-//             {
-//                 .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-//                 .descriptorCount = image_count,
-//             },
-//         [1] =
-//             {
-//                 .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-//                 .descriptorCount = image_count * DEMO_TEXTURE_COUNT,
-//             },
-//     };
-//     const VkDescriptorPoolCreateInfo create_info = {
-//         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-//         .pNext = NULL,
-//         .maxSets = image_count,
-//         .poolSizeCount = 2,
-//         .pPoolSizes = type_counts,
-//     };
-
-//     VkResult result = vkCreateDescriptorPool(device, &create_info, NULL, descriptor_pool);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VK_SUCCESS;
-// }
-
-// VkResult
-// vut_init_descriptor_set(VkDevice device, VkSampler sampler, VkImageView view,
-// VkDescriptorPool pool,
-//                         VkDescriptorSetLayout* layout, VkDescriptorSet* set)
-// {
-//     VkDescriptorImageInfo tex_descs[DEMO_TEXTURE_COUNT];
-//     VkWriteDescriptorSet writes[2];
-
-//     const VkDescriptorSetAllocateInfo alloc_info = {
-//         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-//         .pNext = NULL,
-//         .descriptorPool = pool,
-//         .descriptorSetCount = 1,
-//         .pSetLayouts = layout,
-//     };
-
-//     VkDescriptorBufferInfo buffer_info = {
-//         .offset = 0,
-//         .range = sizeof(struct vktexcube_vs_uniform),
-//     };
-
-//     tex_descs[i].sampler = sampler;
-//     tex_descs[i].imageView = view;
-//     tex_descs[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-//     writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-//     writes[0].descriptorCount = 1;
-//     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-//     writes[0].pBufferInfo = &buffer_info;
-
-//     writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-//     writes[1].dstBinding = 1;
-//     writes[1].descriptorCount = DEMO_TEXTURE_COUNT;
-//     writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-//     writes[1].pImageInfo = tex_descs;
-
-//     for (unsigned int i = 0; i < image_count; i++) {
-//         VkResult result = vkAllocateDescriptorSets(device, &alloc_info, set);
-//         if (result) {
-//             // Error
-//         }
-
-//         buffer_info.buffer = swapchain_image_resources[i].uniform_buffer;
-//         writes[0].dstSet = swapchain_image_resources[i].descriptor_set;
-//         writes[1].dstSet = swapchain_image_resources[i].descriptor_set;
-//         vkUpdateDescriptorSets(device, 2, writes, 0, NULL);
-//     }
-// }
-
-// VkResult
-// vut_build_image_ownership_cmd(VkCommandBuffer present_buffer, uint32_t
-// graphics_queue_family_index,
-//                               uint32_t present_queue_family_index, VkImage swapchain_image)
-// {
-//     VkResult result;
-
-//     const VkCommandBufferBeginInfo cmd_buf_info = {
-//         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-//         .pNext = NULL,
-//         .flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT,
-//         .pInheritanceInfo = NULL,
-//     };
-//     result = vkBeginCommandBuffer(present_buffer, &cmd_buf_info);
-//     if (result) {
-//         // Error
-//     }
-
-//     const VkImageMemoryBarrier image_ownership_barrier = {
-//         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-//         .pNext = NULL,
-//         .srcAccessMask = 0,
-//         .dstAccessMask = 0,
-//         .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-//         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-//         .srcQueueFamilyIndex = graphics_queue_family_index,
-//         .dstQueueFamilyIndex = present_queue_family_index,
-//         .image = swapchain_image,
-//         .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-//     };
-
-//     vkCmdPipelineBarrier(present_buffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-//                          VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0, 0, NULL, 0, NULL, 1,
-//                          &image_ownership_barrier);
-//     result = vkEndCommandBuffer(present_buffer);
-//     if (result) {
-//         // Error
-//     }
-
-//     return VK_SUCCESS;
-// }

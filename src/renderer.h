@@ -26,8 +26,8 @@ struct texture_object
     int32_t tex_width, tex_height;
 };
 
-/*
- * Structure for tracking information used / created / modified
+/**
+ * @brief Structure for tracking information used / created / modified
  * by utility functions.
  */
 typedef struct
@@ -41,6 +41,10 @@ typedef struct
     VkDescriptorSet descriptor_set;
 } SwapchainImageResources;
 
+/**
+ * @brief Context for the renderer
+ *
+ */
 typedef struct _VulkanContext
 {
     bool separate_present_queue;
@@ -102,17 +106,38 @@ typedef struct _VulkanContext
 } VulkanContext;
 
 // Init
+/**
+ * @brief Wrapper to initialize renderer
+ *
+ * @param[in] ctx VulkanContext handle
+ * @param app_name Name off the application
+ */
 void
 vur_init(VulkanContext* ctx, const char* app_name);
 
 // Main loop
+/**
+ * @brief Get events from window
+ *
+ * @param[in] ctx VulkanContext handle
+ */
 void
 vur_update_window(VulkanContext* ctx);
 
+/**
+ * @brief Draw new frame
+ *
+ * @param[in] ctx VulkanContext handle
+ */
 void
 vur_draw(VulkanContext* ctx);
 
 // Destroy
+/**
+ * @brief Destroy the renderer before closing app
+ *
+ * @param[in] ctx VulkanContext handle
+ */
 void
 vur_destroy(VulkanContext* ctx);
 
