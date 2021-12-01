@@ -3,4 +3,4 @@
 	url = https://github.com/glfw/glfw.git
 [submodule "extern/cglm"]
 	path = extern/cglm
-	url = https://github.com/ddorstijn/cglm.git
+	url = https://github.com/recp/cglm
