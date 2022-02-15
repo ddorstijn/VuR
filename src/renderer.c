@@ -14,6 +14,7 @@
 
 #include "vk_util.h"
 #include <stdlib.h>
+#include <string.h>
 
 void
 vur_init(VulkanContext* ctx, const char* app_name)

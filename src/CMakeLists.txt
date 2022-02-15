@@ -12,4 +12,4 @@ target_link_libraries(vulkan_renderer PUBLIC glfw)
 target_link_libraries(vulkan_renderer PUBLIC Vulkan::Vulkan)
 target_link_libraries(vulkan_renderer PUBLIC cglm)
 
-target_compile_definitions(vulkan_renderer PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+# target_compile_definitions(vulkan_renderer PRIVATE VK_USE_PLATFORM_WIN32_KHR)

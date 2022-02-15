@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #define DEBUG 1
 
@@ -34,29 +35,21 @@ get_required_extensions(uint32_t* extension_count, const char* extensions[])
         *extension_count = glfw_count;
 
 #ifdef DEBUG
-        uint32_t debug_count = ARRAY_SIZE(debug);
-        *extension_count = glfw_count + debug_count;
+        *extension_count = glfw_count + ARRAY_SIZE(debug);
 #endif // DEBUG
 
         return;
     }
 
-    // Fill the first port of the array with the glfw layers
-    for (uint32_t i = 0; i < glfw_count; i++) {
-        extensions[i] = glfw_extensions[i];
-    }
+    memcpy(extensions, glfw_extensions, glfw_count * sizeof *extensions);
 
 #ifdef DEBUG
-    // And add the new debug layers
-    for (uint32_t i = glfw_count; i < *extension_count; i++) {
-        extensions[i] = debug[i - glfw_count];
-    }
-
-    printf("Used extensions:\n");
-    for (uint32_t i = 0; i < *extension_count; i++) {
-        printf("%s\n", extensions[i]);
-    }
+    memcpy(extensions + glfw_count, debug, *extension_count * sizeof *debug);
 #endif // DEBUG
+}
+
+void error_callback(GLint error, const char* err) {
+    printf("%s\n", err);
 }
 
 bool
@@ -70,12 +63,14 @@ vut_init_window(const char app_name[], GLFWwindow** window)
         // Error
     }
 
+    glfwSetErrorCallback(error_callback);
+
     // Options not necessary for Vulkan
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     *window = glfwCreateWindow(640, 480, app_name, NULL, NULL);
     if (!*window) {
         // Window or OpenGL context creation failed
-        // Error
+        printf("Failed to create winodw");
     }
 
     return true;
@@ -98,10 +93,11 @@ vut_init_instance(const char app_name[], VkInstance* instance)
     uint32_t extension_count = 0;
     get_required_extensions(&extension_count, NULL);
 
-    const char* extensions[extension_count];
+    const char** extensions = malloc(extension_count * sizeof extensions);
     get_required_extensions(&extension_count, extensions);
-
+    
     // Create instance
+    const char* layer_names[] = { "VK_LAYER_KHRONOS_validation" };
     const VkInstanceCreateInfo instance_info = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = NULL,
@@ -110,8 +106,8 @@ vut_init_instance(const char app_name[], VkInstance* instance)
         .enabledExtensionCount = extension_count,
         .ppEnabledExtensionNames = extensions,
 #ifdef DEBUG
-        .ppEnabledLayerNames = (const char* []){ "VK_LAYER_LUNARG_standard_validation" },
-        .enabledLayerCount = ARRAY_SIZE(instance_info.ppEnabledExtensionNames),
+        .ppEnabledLayerNames =  layer_names,
+        .enabledLayerCount = 1,
 #else
         .ppEnabledLayerNames = NULL,
         .enabledLayerCount = 0,
@@ -119,11 +115,9 @@ vut_init_instance(const char app_name[], VkInstance* instance)
     };
 
     VkResult result = vkCreateInstance(&instance_info, NULL, instance);
-    if (result) {
-        return result;
-    }
 
-    return VK_SUCCESS;
+    free(extensions);
+    return result;
 }
 
 VkResult
@@ -252,6 +246,8 @@ vut_get_queue_family_indices(VkPhysicalDevice gpu,
     *graphics_queue_family_index = graphics_index;
     *present_queue_family_index = present_index;
     *separate_present_queue = (graphics_index != present_index);
+
+    return true;
 }
 
 VkResult
@@ -605,8 +601,10 @@ vut_init_shader_module(VkDevice device, char* shader_name, VkShaderModule* shade
     };
 
     if (vkCreateShaderModule(device, &createInfo, NULL, shader_module) != VK_SUCCESS) {
-        // Error
+        return false;
     }
+
+    return true;
 }
 
 VkResult
@@ -704,8 +702,10 @@ vut_init_pipeline(VkDevice device,
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, pipeline) !=
         VK_SUCCESS) {
-        // Error
+        return false;
     }
+
+    return true;
 }
 
 VkResult
